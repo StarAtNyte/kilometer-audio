@@ -1,0 +1,22 @@
+[project]
+name = "kilometer-audio-kite"
+version = "0.1.0"
+description = "KITE evidence pipeline for the Perception Test 2026 KilometerAudio track"
+requires-python = ">=3.11"
+dependencies = [
+  "modal>=1.5,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "ruff>=0.12,<1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
