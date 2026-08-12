@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import gzip
 import json
 import os
 import subprocess
@@ -26,6 +27,8 @@ from kite_core import (
 APP_NAME = "kilometer-audio-kite"
 VOLUME_NAME = "perception-test-2026-data"
 VALIDATION_URL = "https://storage.googleapis.com/dm-perception-test/WT/wt_valid.json"
+AUDIO_TEST_URL = "https://storage.googleapis.com/dm-perception-test/WT/kilometeraudio_test_public.json"
+VISION_TEST_URL = "https://storage.googleapis.com/dm-perception-test/kilometer_vision_2026_val/kilometervision_test_public.json"
 LEGACY_VIDEO_LIST_URL = (
     "https://storage.googleapis.com/dm-perception-test/misc/walking_tours_urls.csv"
 )
@@ -198,7 +201,10 @@ def split_video_jobs(split: str) -> list[dict[str, str]]:
 
 @app.function(
     image=base_image,
-    secrets=[modal.Secret.from_name("youtube-cookies")],
+    secrets=[
+        modal.Secret.from_name("youtube-cookies"),
+        modal.Secret.from_name("youtube-proxy"),
+    ],
     volumes={"/data": volume},
     timeout=6 * 60 * 60,
 )
@@ -224,21 +230,38 @@ def download_video(video_id: str, url: str, split: str = "validation") -> dict[s
         "--no-playlist",
         "--continue",
         "--no-overwrites",
+        "--retries",
+        "10",
+        "--fragment-retries",
+        "10",
+        "--sleep-requests",
+        "1",
+        "--sleep-interval",
+        "5",
+        "--max-sleep-interval",
+        "15",
         "--write-info-json",
         "--merge-output-format",
         "mkv",
+        "--extractor-args",
+        "youtube:player_client=android_vr",
         "-f",
-        "bestvideo[height<=1080]+bestaudio/best[height<=1080]",
+        "bestvideo[height<=720]+bestaudio/best[height<=720]",
         "-o",
         partial_template,
     ]
+    proxy = os.getenv("YTDLP_PROXY", "")
+    if proxy:
+        command.extend(["--proxy", proxy])
     encoded_cookies = os.getenv("YOUTUBE_COOKIES_B64", "")
-    if encoded_cookies and encoded_cookies != "not-configured":
+    compressed_cookies = os.getenv("YOUTUBE_COOKIES_GZIP_B64", "")
+    if os.getenv("YOUTUBE_USE_COOKIES", "0") == "1" and (encoded_cookies or compressed_cookies):
         cookie_path = Path("/tmp/youtube-cookies.txt")
         try:
-            cookie_path.write_bytes(base64.b64decode(encoded_cookies, validate=True))
-        except ValueError as error:
-            raise ValueError("YOUTUBE_COOKIES_B64 is not valid base64") from error
+            raw = base64.b64decode(compressed_cookies or encoded_cookies, validate=True)
+            cookie_path.write_bytes(gzip.decompress(raw) if compressed_cookies else raw)
+        except (ValueError, gzip.BadGzipFile) as error:
+            raise ValueError("YouTube cookie secret is not valid base64/gzip") from error
         command.extend(["--cookies", str(cookie_path)])
     command.append(url)
     completed = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -254,7 +277,14 @@ def download_video(video_id: str, url: str, split: str = "validation") -> dict[s
             },
         )
         volume.commit()
-        raise RuntimeError(completed.stderr[-4000:])
+        return {
+            "video_id": video_id,
+            "source_url": url,
+            "split": split,
+            "status": "failed",
+            "path": str(final_path),
+            "error": completed.stderr[-4000:],
+        }
 
     candidates = sorted(destination_dir.glob(f"{video_id}.partial.*"))
     media_candidates = [
@@ -276,6 +306,88 @@ def download_video(video_id: str, url: str, split: str = "validation") -> dict[s
     atomic_write_json(metadata_path, record)
     volume.commit()
     return record
+
+
+@app.function(
+    image=base_image,
+    secrets=[
+        modal.Secret.from_name("youtube-cookies"),
+        modal.Secret.from_name("youtube-proxy"),
+    ],
+    volumes={"/data": volume},
+    timeout=24 * 60 * 60,
+    memory=4096,
+)
+def download_all_test_videos() -> dict[str, Any]:
+    """Durable single-container downloader for the union of Audio and Vision test videos."""
+    volume.reload()
+    audio_path = TRACK_ROOT / "manifests" / "test_questions.json"
+    audio = json.loads(audio_path.read_text()) if audio_path.exists() else _fetch_json(AUDIO_TEST_URL)
+    vision = _fetch_json(VISION_TEST_URL)
+    jobs: dict[str, dict[str, str]] = {}
+    for payload in list(audio.values()) + [q for video in vision.values() for q in video.values()]:
+        jobs[_video_id(payload)] = {"video_id": _video_id(payload), "url": str(payload["video_url"])}
+    encoded = os.getenv("YOUTUBE_COOKIES_B64", "")
+    compressed = os.getenv("YOUTUBE_COOKIES_GZIP_B64", "")
+    cookie_path: Path | None = None
+    if os.getenv("YOUTUBE_USE_COOKIES", "0") == "1" and (encoded or compressed):
+        raw = base64.b64decode(compressed or encoded, validate=True)
+        cookie_path = Path("/tmp/youtube-cookies.txt")
+        cookie_path.write_bytes(gzip.decompress(raw) if compressed else raw)
+    jobs = {
+        video_id: job
+        for video_id, job in jobs.items()
+        if not (SHARED_VIDEO_ROOT / video_id / f"{video_id}.mkv").exists()
+    }
+    complete = failed = 0
+    for index, job in enumerate(jobs.values(), 1):
+        video_id, url = job["video_id"], job["url"]
+        destination_dir = SHARED_VIDEO_ROOT / video_id
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        final_path = destination_dir / f"{video_id}.mkv"
+        if final_path.exists() and final_path.stat().st_size > 0:
+            complete += 1
+            print(f"[{index}/{len(jobs)}] already present {video_id}", flush=True)
+            continue
+        command = [
+            "yt-dlp", "--no-playlist", "--continue", "--no-overwrites",
+            "--retries", "10", "--fragment-retries", "10",
+            "--sleep-requests", "1", "--sleep-interval", "5", "--max-sleep-interval", "15",
+            "--extractor-args", "youtube:player_client=android_vr",
+            "--write-info-json", "--merge-output-format", "mkv",
+            "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]",
+            "-o", str(destination_dir / f"{video_id}.partial.%(ext)s"), url,
+        ]
+        if cookie_path:
+            command[-1:-1] = ["--cookies", str(cookie_path)]
+        if os.getenv("YTDLP_PROXY"):
+            command[-1:-1] = ["--proxy", os.environ["YTDLP_PROXY"]]
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        candidates = [p for p in destination_dir.glob(f"{video_id}.partial.*") if p.suffix in {".mkv", ".mp4", ".webm"}]
+        if result.returncode == 0 and candidates:
+            os.replace(max(candidates, key=lambda p: p.stat().st_size), final_path)
+            atomic_write_json(destination_dir / "download.json", {
+                "video_id": video_id, "source_url": url, "split": "test",
+                "status": "complete", "path": str(final_path),
+                "bytes": final_path.stat().st_size, "sha256": sha256_file(final_path),
+            })
+            complete += 1
+            print(f"[{index}/{len(jobs)}] complete {video_id}", flush=True)
+        else:
+            failed += 1
+            atomic_write_json(destination_dir / "download.json", {
+                "video_id": video_id, "source_url": url, "split": "test",
+                "status": "failed", "error": result.stderr[-4000:],
+            })
+            print(
+                f"[{index}/{len(jobs)}] failed {video_id}: {result.stderr[-1000:]}",
+                flush=True,
+            )
+        volume.commit()
+        if index < len(jobs):
+            import time
+            time.sleep(15)
+    return {"videos": len(jobs), "complete": complete, "failed": failed}
 
 
 @app.function(image=base_image, volumes={"/data": volume}, memory=4096, timeout=30 * 60)
@@ -636,7 +748,14 @@ def generate_audio_rag_submission(split: str = "validation") -> dict[str, Any]:
         embedding_path = TRACK_ROOT / "embeddings" / f"{video_id}.clap.npy"
         rows_path = TRACK_ROOT / "embeddings" / f"{video_id}.clap.jsonl"
         if not embedding_path.exists() or not rows_path.exists():
-            raise FileNotFoundError(f"Missing CLAP index for {video_id}")
+            for question_id, payload in video_questions:
+                selected[question_id] = 0
+                evidence[question_id] = {
+                    "answer_id": 0,
+                    "fallback": "missing_media_or_index",
+                    "video_id": video_id,
+                }
+            continue
         audio_features = np.load(embedding_path).astype("float32")
         rows = [json.loads(line) for line in rows_path.read_text().splitlines()]
 
@@ -739,7 +858,7 @@ def main(
     elif action == "download":
         if not video_id or not url:
             raise ValueError("download requires --video-id and --url")
-        print(json.dumps(download_video.remote(video_id, url), indent=2))
+        print(json.dumps(download_video.remote(video_id, url, split), indent=2))
     elif action == "extract":
         if not video_id:
             raise ValueError("extract requires --video-id")
@@ -765,16 +884,69 @@ def main(
         print(json.dumps(generate_audio_rag_submission.remote(split), indent=2))
     elif action == "audit-submission":
         print(json.dumps(audit_generated_submission.remote(split), indent=2))
+    elif action == "download-split":
+        jobs = split_video_jobs.remote(split)
+        # YouTube rate-limits bursts. Keep the producer deliberately small and resumable.
+        for offset in range(0, len(jobs)):
+            batch = jobs[offset : offset + 1]
+            video_ids = [job["video_id"] for job in batch]
+            urls = [job["url"] for job in batch]
+            splits = [split] * len(batch)
+            for result in download_video.map(
+                video_ids, urls, splits, order_outputs=False
+            ):
+                print(json.dumps(result, indent=2), flush=True)
+            if offset + 1 < len(jobs):
+                import time
+                time.sleep(15)
+    elif action == "download-all-test":
+        call = download_all_test_videos.spawn()
+        print(json.dumps({"function_call_id": call.object_id, "status": "spawned"}, indent=2))
     elif action == "run-split":
         jobs = split_video_jobs.remote(split)
-        for job in jobs:
+        total = len(jobs)
+        progress: dict[str, Any] = {
+            "split": split,
+            "total": total,
+            "completed": 0,
+            "skipped": 0,
+            "current": None,
+            "stages": {},
+        }
+
+        def report(video_id: str | None, stage: str, status: str, **extra: Any) -> None:
+            if video_id:
+                progress["current"] = video_id
+                progress["stages"].setdefault(video_id, {})[stage] = status
+            progress.update(extra)
+            print(json.dumps({"progress": progress, "stage": stage}), flush=True)
+
+        for index, job in enumerate(jobs, 1):
             current_id = job["video_id"]
-            print(json.dumps(download_video.remote(current_id, job["url"], split), indent=2))
-            print(json.dumps(probe_and_extract_audio.remote(current_id), indent=2))
-            transcript = transcribe.remote(current_id)
-            print(json.dumps({"video_id": current_id, "segments": len(transcript["segments"])}))
-            print(json.dumps(build_audio_index.remote(current_id), indent=2))
-        print(json.dumps(generate_audio_rag_submission.remote(split), indent=2))
-        print(json.dumps(audit_generated_submission.remote(split), indent=2))
+            report(current_id, "start", "running", index=index)
+            try:
+                report(current_id, "download", "running")
+                download_result = download_video.remote(current_id, job["url"], split)
+                if download_result.get("status") == "failed":
+                    progress["skipped"] += 1
+                    report(current_id, "download", "failed")
+                    continue
+                report(current_id, "download", "complete")
+                report(current_id, "extract", "running")
+                probe_and_extract_audio.remote(current_id)
+                report(current_id, "extract", "complete")
+                report(current_id, "transcribe", "running")
+                transcript = transcribe.remote(current_id)
+                report(current_id, "transcribe", "complete", segments=len(transcript["segments"]))
+                report(current_id, "index", "running")
+                build_audio_index.remote(current_id)
+                progress["completed"] += 1
+                report(current_id, "index", "complete")
+            except Exception as error:
+                progress["skipped"] += 1
+                report(current_id, "error", str(error))
+        report(None, "submission", "running")
+        print(json.dumps(generate_audio_rag_submission.remote(split), indent=2), flush=True)
+        print(json.dumps(audit_generated_submission.remote(split), indent=2), flush=True)
     else:
         raise ValueError(f"Unknown action: {action}")

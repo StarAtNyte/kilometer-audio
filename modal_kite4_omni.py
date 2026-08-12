@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -105,15 +106,18 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
     memory=131072,
     timeout=8 * 60 * 60,
 )
-def generate_validation() -> dict[str, Any]:
+def generate_validation(split: str = "validation") -> dict[str, Any]:
     import torch
     from qwen_omni_utils import process_mm_info
     from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
     volume.reload()
-    questions = json.loads((TRACK_ROOT / "manifests" / "validation_questions.json").read_text())
+    print(f"[kite4] start split={split}", flush=True)
+    if split not in {"validation", "test"}:
+        raise ValueError(f"Unsupported split: {split}")
+    questions = json.loads((TRACK_ROOT / "manifests" / f"{split}_questions.json").read_text())
     evidence = json.loads(
-        (TRACK_ROOT / "predictions" / "validation" / "kite3_evidence.json").read_text()
+        (TRACK_ROOT / "predictions" / split / "kite3_evidence.json").read_text()
     )
     cache = TRACK_ROOT / "models" / "huggingface"
     model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
@@ -124,7 +128,7 @@ def generate_validation() -> dict[str, Any]:
     ).eval()
     model.disable_talker()
     processor = Qwen3OmniMoeProcessor.from_pretrained(MODEL_NAME, cache_dir=cache)
-    output = TRACK_ROOT / "predictions" / "validation"
+    output = TRACK_ROOT / "predictions" / split
     partial_path = output / "kite4_omni_partial.json"
     records: dict[str, Any] = (
         json.loads(partial_path.read_text()) if partial_path.exists() else {}
@@ -132,10 +136,13 @@ def generate_validation() -> dict[str, Any]:
     selected: dict[str, int] = {
         question_id: int(row["answer_id"]) for question_id, row in records.items()
     }
+    print(f"[kite4] questions={len(questions)} cached={len(selected)}; model loaded", flush=True)
+    started = time.monotonic()
     for index, (question_id, payload) in enumerate(questions.items()):
         if question_id in selected:
             continue
         row = evidence[question_id]
+        print(f"[kite4] question {index + 1}/{len(questions)} id={question_id}", flush=True)
         source = SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"
         card = Path("/tmp") / f"kite4-{index}.mp4"
         render_av_card(source, row["intervals"], card)
@@ -205,6 +212,12 @@ def generate_validation() -> dict[str, Any]:
         atomic_write_json(partial_path, records)
         volume.commit()
         card.unlink(missing_ok=True)
+        done = len(selected)
+        if done == 1 or done % 10 == 0 or done == len(questions):
+            elapsed = time.monotonic() - started
+            rate = done / elapsed if elapsed else 0.0
+            print(f"[kite4] answered {done}/{len(questions)} elapsed={elapsed/60:.1f}m rate={rate:.2f}/s", flush=True)
+    print("[kite4] writing artifacts", flush=True)
     submission = build_submission(questions, selected)
     atomic_write_json(output / "kite4_omni_submission.json", submission)
     atomic_write_json(output / "kite4_omni_evidence.json", records)
@@ -217,5 +230,5 @@ def generate_validation() -> dict[str, Any]:
 
 
 @app.local_entrypoint()
-def main() -> None:
-    print(json.dumps(generate_validation.remote(), indent=2))
+def main(split: str = "validation") -> None:
+    print(json.dumps(generate_validation.remote(split), indent=2))

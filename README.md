@@ -51,19 +51,23 @@ submitted as a competitive run**:
 /data/2706-kilometer-audio/predictions/validation/fused_evidence.json
 ```
 
-When the test metadata is released, ingest it directly from its official URL (the JSON
-lands in the Volume, not this checkout), then run the same pipeline:
+The test metadata is now released at the official URL below. Ingest it directly into
+Modal Volume storage, then download/index the split and run the frozen KITE-4 audio-video
+candidate:
 
 ```bash
-modal run modal_pipeline.py --action ingest --split test --url OFFICIAL_TEST_JSON_URL
+TEST_URL=https://storage.googleapis.com/dm-perception-test/WT/kilometeraudio_test_public.json
+modal run modal_pipeline.py --action ingest --split test --url "$TEST_URL"
+modal run modal_pipeline.py --action download-split --split test
 modal run modal_pipeline.py --action run-split --split test
-modal run modal_visual.py --action answer-split --split test
+modal run modal_visual.py --action index-split --split test
+modal run modal_kite3_submit.py --split test
+modal run modal_kite4_omni.py --split test
 ```
 
-The organizer's published test release date is August 5, 2026. Before that date there
-is no official test manifest to ingest and therefore no legitimate test submission to
-generate. Do not substitute validation labels or manually selected answers into the
-test pipeline.
+The final artifact is `/data/2706-kilometer-audio/predictions/test/kite4_omni_submission.json`.
+
+Do not substitute validation labels or manually selected answers into the test pipeline.
 
 The generated upload artifact is
 `/data/2706-kilometer-audio/predictions/SPLIT/audio_rag_submission.json` in the Modal

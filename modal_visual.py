@@ -491,9 +491,13 @@ def main(
         # Metadata is public; video IDs are resolved locally without media transfer.
         import urllib.request
 
-        url = "https://storage.googleapis.com/dm-perception-test/WT/wt_valid.json"
-        if split != "validation":
-            raise ValueError("Use --action index for test videos after test release")
+        urls = {
+            "validation": "https://storage.googleapis.com/dm-perception-test/WT/wt_valid.json",
+            "test": "https://storage.googleapis.com/dm-perception-test/WT/kilometeraudio_test_public_20260811.json",
+        }
+        if split not in urls:
+            raise ValueError(f"Unsupported split: {split}")
+        url = urls[split]
         with urllib.request.urlopen(url, timeout=60) as response:
             payload = json.load(response)
         video_ids = sorted({_video_id(item) for item in payload.values()})

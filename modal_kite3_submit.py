@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -106,57 +107,59 @@ def duration_of(path: Path) -> float:
     memory=65536,
     timeout=8 * 60 * 60,
 )
-def generate_validation() -> dict[str, Any]:
+def generate_validation(split: str = "validation") -> dict[str, Any]:
     import numpy as np
     import torch
     from qwen_vl_utils import process_vision_info
     from transformers import AutoModel, AutoModelForImageTextToText, AutoProcessor
 
     volume.reload()
-    split = "validation"
-    questions = json.loads((TRACK_ROOT / "manifests" / "validation_questions.json").read_text())
+    if split not in {"validation", "test"}:
+        raise ValueError(f"Unsupported split: {split}")
+    questions = json.loads((TRACK_ROOT / "manifests" / f"{split}_questions.json").read_text())
     cache = TRACK_ROOT / "models" / "huggingface"
 
-    proxy_dir = TRACK_ROOT / "proxies" / "validation-1fps"
+    proxy_dir = TRACK_ROOT / "proxies" / f"{split}-1fps"
     proxy_dir.mkdir(parents=True, exist_ok=True)
-    proxy_by_video: dict[str, Path] = {}
-    for payload in questions.values():
-        vid = video_id(payload)
-        if vid in proxy_by_video:
-            continue
+    print(f"[kite3] start split={split} questions={len(questions)}", flush=True)
+    unique_videos = sorted({video_id(payload) for payload in questions.values()})
+    proxy_by_video = {
+        vid: proxy_dir / f"{vid}.mp4" for vid in unique_videos
+    }
+    pending = [vid for vid in unique_videos if not proxy_by_video[vid].exists() or proxy_by_video[vid].stat().st_size == 0]
+    print(f"[kite3] proxies cached={len(unique_videos)-len(pending)} pending={len(pending)}", flush=True)
+
+    def make_proxy(vid: str) -> tuple[str, str]:
         source = SHARED_VIDEO_ROOT / vid / f"{vid}.mkv"
-        proxy = proxy_dir / f"{vid}.mp4"
-        if not proxy.exists() or proxy.stat().st_size == 0:
-            conversion = subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    str(source),
-                    "-an",
-                    "-vf",
-                    (
-                        "fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
-                        "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1"
-                    ),
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "ultrafast",
-                    "-crf",
-                    "30",
-                    "-movflags",
-                    "+faststart",
-                    str(proxy),
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if conversion.returncode:
-                raise RuntimeError(conversion.stderr[-3000:])
-        proxy_by_video[vid] = proxy
+        proxy = proxy_by_video[vid]
+        partial = proxy.with_name(proxy.stem + ".partial.mp4")
+        conversion = subprocess.run(
+            ["ffmpeg", "-y", "-threads", "0", "-i", str(source), "-an", "-vf",
+             "fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
+             "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1", "-c:v", "libx264",
+             "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial)],
+            check=False, capture_output=True, text=True, timeout=300,
+        )
+        if conversion.returncode or not partial.exists() or partial.stat().st_size == 0:
+            partial.unlink(missing_ok=True)
+            return vid, conversion.stderr[-1000:]
+        partial.replace(proxy)
+        return vid, ""
+
+    failures = []
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(make_proxy, vid): vid for vid in pending}
+        for done, future in enumerate(as_completed(futures), 1):
+            vid, error = future.result()
+            if error:
+                failures.append((vid, error))
+                print(f"[kite3] proxy FAILED {vid}: {error[-180:]}", flush=True)
+            else:
+                print(f"[kite3] proxy complete {done}/{len(pending)} {vid}", flush=True)
+    if failures:
+        raise RuntimeError("Proxy failures: " + "; ".join(vid for vid, _ in failures))
     volume.commit()
+    print(f"[kite3] proxies ready videos={len(proxy_by_video)}; loading retrieval models", flush=True)
 
     siglip_processor = AutoProcessor.from_pretrained(SIGLIP_MODEL, cache_dir=cache)
     siglip = (
@@ -174,7 +177,8 @@ def generate_validation() -> dict[str, Any]:
     ).eval()
 
     grounded: dict[str, dict[str, Any]] = {}
-    for question_id, payload in questions.items():
+    print("[kite3] stage=grounding", flush=True)
+    for ground_index, (question_id, payload) in enumerate(questions.items(), 1):
         vid = video_id(payload)
         path = proxy_by_video[vid]
         duration = duration_of(path)
@@ -270,7 +274,10 @@ def generate_validation() -> dict[str, Any]:
             "visual_times": visual_times,
             "intervals": merge_intervals(intervals),
         }
+        if ground_index == 1 or ground_index % 10 == 0 or ground_index == len(questions):
+            print(f"[kite3] grounding {ground_index}/{len(questions)}", flush=True)
 
+    print("[kite3] stage=verification loading verifier", flush=True)
     del timelens
     del siglip
     torch.cuda.empty_cache()
@@ -284,12 +291,13 @@ def generate_validation() -> dict[str, Any]:
     ).eval()
 
     selected: dict[str, int] = {}
+    print("[kite3] stage=verification", flush=True)
     for card_index, (question_id, payload) in enumerate(questions.items()):
         evidence = grounded[question_id]
         intervals = evidence["intervals"]
         if not intervals:
             raise ValueError(f"No evidence intervals for {question_id}")
-        card_path = Path("/tmp") / f"kite3-validation-{card_index}.mp4"
+        card_path = Path("/tmp") / f"kite3-{split}-{card_index}.mp4"
         ffmpeg_inputs = [
             item
             for start, end in intervals
@@ -400,7 +408,11 @@ def generate_validation() -> dict[str, Any]:
         evidence["verifier_responses"] = verifier_responses
         evidence["card_seconds"] = sum(end - start for start, end in intervals)
         card_path.unlink(missing_ok=True)
+        done = card_index + 1
+        if done == 1 or done % 10 == 0 or done == len(questions):
+            print(f"[kite3] verification {done}/{len(questions)}", flush=True)
 
+    print("[kite3] writing artifacts", flush=True)
     submission = build_submission(questions, selected)
     errors = validate_predictions(questions, submission)
     if errors:
@@ -419,5 +431,5 @@ def generate_validation() -> dict[str, Any]:
 
 
 @app.local_entrypoint()
-def main() -> None:
-    print(json.dumps(generate_validation.remote(), indent=2))
+def main(split: str = "validation") -> None:
+    print(json.dumps(generate_validation.remote(split), indent=2))
