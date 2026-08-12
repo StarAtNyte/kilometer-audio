@@ -49,6 +49,7 @@ def parse_letter(text: str) -> int | None:
 
 
 def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> None:
+    partial = output.with_name(output.stem + ".partial.mp4")
     ffmpeg_inputs = [
         item
         for start, end in intervals
@@ -79,6 +80,8 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             "[outv]",
             "-map",
             "[outa]",
+            "-threads",
+            "0",
             "-c:v",
             "libx264",
             "-preset",
@@ -89,14 +92,17 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             "aac",
             "-b:a",
             "96k",
-            str(output),
+            str(partial),
         ],
         check=False,
         capture_output=True,
         text=True,
+        timeout=300,
     )
-    if result.returncode:
+    if result.returncode or not partial.exists() or partial.stat().st_size == 0:
+        partial.unlink(missing_ok=True)
         raise RuntimeError(result.stderr[-4000:])
+    partial.replace(output)
 
 
 @app.function(
