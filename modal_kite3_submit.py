@@ -126,19 +126,41 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
     proxy_by_video = {
         vid: proxy_dir / f"{vid}.mp4" for vid in unique_videos
     }
-    pending = [vid for vid in unique_videos if not proxy_by_video[vid].exists() or proxy_by_video[vid].stat().st_size == 0]
+    def valid_proxy(path: Path) -> bool:
+        if not path.exists() or path.stat().st_size == 0:
+            return False
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)], capture_output=True, text=True)
+        return probe.returncode == 0 and bool(probe.stdout.strip())
+
+    pending = [vid for vid in unique_videos if not valid_proxy(proxy_by_video[vid])]
     print(f"[kite3] proxies cached={len(unique_videos)-len(pending)} pending={len(pending)}", flush=True)
 
     def make_proxy(vid: str) -> tuple[str, str]:
         source = SHARED_VIDEO_ROOT / vid / f"{vid}.mkv"
         proxy = proxy_by_video[vid]
         partial = proxy.with_name(proxy.stem + ".partial.mp4")
+        frame_dir = TRACK_ROOT / "frames" / vid / "uniform-5s"
+        frame_files = sorted(frame_dir.glob("*.jpg")) if frame_dir.exists() else []
+        if frame_files:
+            # Use a compact 24-frame proxy; avoid expensive Volume image reads.
+            stride = max(1, len(frame_files) // 24)
+            selected_frames = frame_files[::stride][:24]
+            concat_list = Path("/tmp") / f"kite3-{vid}-frames.txt"
+            concat_list.write_text("".join(f"file '{p}'\nduration 5\n" for p in selected_frames))
+            ffmpeg_args = [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list), "-an", "-vf",
+                "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial),
+            ]
+        else:
+            ffmpeg_args = [
+                "ffmpeg", "-y", "-threads", "0", "-i", str(source), "-an", "-vf",
+                "fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
+                "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1", "-c:v", "libx264",
+                "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial),
+            ]
         conversion = subprocess.run(
-            ["ffmpeg", "-y", "-threads", "0", "-i", str(source), "-an", "-vf",
-             "fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
-             "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1", "-c:v", "libx264",
-             "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial)],
-            check=False, capture_output=True, text=True, timeout=300,
+            ffmpeg_args, check=False, capture_output=True, text=True, timeout=300,
         )
         if conversion.returncode or not partial.exists() or partial.stat().st_size == 0:
             partial.unlink(missing_ok=True)
@@ -182,32 +204,35 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         vid = video_id(payload)
         path = proxy_by_video[vid]
         duration = duration_of(path)
-        rows = [
-            json.loads(line)
-            for line in (TRACK_ROOT / "embeddings" / f"{vid}.siglip2.jsonl")
-            .read_text()
-            .splitlines()
-        ]
-        embeddings = np.load(TRACK_ROOT / "embeddings" / f"{vid}.siglip2.npy").astype("float32")
-        option_queries = [payload["question"] + " " + option for option in payload["options"]]
-        encoded_text = siglip_processor(
-            text=option_queries, padding="max_length", truncation=True, return_tensors="pt"
-        )
-        encoded_text = {key: value.to("cuda") for key, value in encoded_text.items()}
-        with torch.inference_mode():
-            text_features = (
-                torch.nn.functional.normalize(siglip.get_text_features(**encoded_text), dim=-1)
-                .cpu()
-                .numpy()
+        rows_path = TRACK_ROOT / "embeddings" / f"{vid}.siglip2.jsonl"
+        embedding_path = TRACK_ROOT / "embeddings" / f"{vid}.siglip2.npy"
+        visual_times: list[float] = []
+        if rows_path.exists() and embedding_path.exists():
+            rows = [json.loads(line) for line in rows_path.read_text().splitlines()]
+            embeddings = np.load(embedding_path).astype("float32")
+            option_queries = [payload["question"] + " " + option for option in payload["options"]]
+            encoded_text = siglip_processor(
+                text=option_queries, padding="max_length", truncation=True, return_tensors="pt"
             )
-        scores = np.max(embeddings @ text_features.T, axis=1)
-        visual_times = []
-        for raw_index in np.argsort(-scores):
-            timestamp = float(rows[int(raw_index)]["timestamp"])
-            if all(abs(timestamp - old) >= 25.0 for old in visual_times):
-                visual_times.append(timestamp)
-            if len(visual_times) == 5:
-                break
+            encoded_text = {key: value.to("cuda") for key, value in encoded_text.items()}
+            with torch.inference_mode():
+                text_features = (
+                    torch.nn.functional.normalize(siglip.get_text_features(**encoded_text), dim=-1)
+                    .cpu()
+                    .numpy()
+                )
+            scores = np.max(embeddings @ text_features.T, axis=1)
+            for raw_index in np.argsort(-scores):
+                timestamp = float(rows[int(raw_index)]["timestamp"])
+                if all(abs(timestamp - old) >= 25.0 for old in visual_times):
+                    visual_times.append(timestamp)
+                if len(visual_times) == 5:
+                    break
+        else:
+            # Some videos have frames but no completed SigLIP index; retain them
+            # in the multimodal pass using evenly spaced proxy timestamps.
+            visual_times = np.linspace(0.0, max(0.0, duration - 1.0), 5).tolist()
+            print(f"[kite3] missing visual index; uniform timestamps video={vid}", flush=True)
 
         query_text = payload["question"] + " Options: " + " | ".join(payload["options"])
         prompt = (
