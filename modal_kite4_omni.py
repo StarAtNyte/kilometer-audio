@@ -49,6 +49,10 @@ def parse_letter(text: str) -> int | None:
     return ord(match.group(1).upper()) - ord("A") if match else None
 
 
+def source_duration(source: Path) -> float:
+    return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(source)], text=True).strip())
+
+
 def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> None:
     partial = output.with_name(output.stem + ".partial.mp4")
     ffmpeg_inputs = [
@@ -63,8 +67,9 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             "force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,"
             f"setsar=1[v{index}]"
         )
-    joined = "".join(f"[v{i}]" for i in range(len(intervals)))
-    graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=0[outv]"
+        filters.append(f"[{index}:a]asetpts=PTS-STARTPTS,aresample=16000[a{index}]")
+    joined = "".join(f"[v{i}][a{i}]" for i in range(len(intervals)))
+    graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=1[outv][outa]"
     result = subprocess.run(
         [
             "ffmpeg",
@@ -74,6 +79,8 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             graph,
             "-map",
             "[outv]",
+            "-map",
+            "[outa]",
             "-threads",
             "0",
             "-c:v",
@@ -82,6 +89,10 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             "ultrafast",
             "-crf",
             "30",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
             str(partial),
         ],
         check=False,
@@ -152,16 +163,18 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             print(f"[kite4] fallback {len(selected)}/{len(questions)} id={question_id} video={row['video_id']}", flush=True)
             continue
         card = Path("/tmp") / f"kite4-{index}.mp4"
-        render_av_card(source, row["intervals"], card)
-        image_path = Path("/tmp") / f"kite4-{index}.jpg"
+        duration = source_duration(source)
+        intervals = [[max(0.0, min(duration, float(start))), max(0.0, min(duration, float(end)))] for start, end in row["intervals"] if float(end) > float(start)]
+        intervals = [[start, end] for start, end in intervals if end > start]
+        render_av_card(source, intervals, card)
+        image_paths = []
+        for image_index, (start, end) in enumerate(intervals[:5]):
+            image_path = Path("/tmp") / f"kite4-{index}-{image_index}.jpg"
+            image_render = subprocess.run(["ffmpeg", "-y", "-ss", str(start), "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True)
+            if image_render.returncode == 0 and image_path.exists():
+                image_paths.append(image_path)
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
-        image_render = subprocess.run(["ffmpeg", "-y", "-i", str(card), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True)
-        if image_render.returncode or not image_path.exists():
-            # Sparse proxy may not overlap a requested interval; use its first
-            # frame so adjudication remains resumable rather than aborting.
-            subprocess.run(["ffmpeg", "-y", "-ss", "0", "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], check=True, capture_output=True)
-        start, end = row["intervals"][0]
-        subprocess.run(["ffmpeg", "-y", "-ss", str(start), "-i", str(source), "-t", str(max(0.1, end - start)), "-vn", "-ac", "1", "-ar", "16000", str(audio_path)], check=True, capture_output=True)
+        subprocess.run(["ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000", str(audio_path)], check=True, capture_output=True)
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
             for option_id, option in enumerate(payload["options"])
@@ -175,7 +188,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image_path.resolve().as_uri()},
+                    *[{"type": "image", "image": path.resolve().as_uri()} for path in image_paths],
                     {"type": "audio", "audio": audio_path.resolve().as_uri()},
                     {"type": "text", "text": prompt},
                 ],
@@ -223,8 +236,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         records[question_id] = {
             "answer_id": answer_id,
             "response": response,
-            "intervals": row["intervals"],
-            "card_seconds": sum(end - start for start, end in row["intervals"]),
+            "intervals": intervals,
+            "card_seconds": sum(end - start for start, end in intervals),
             "fallback": False,
             "video_id": row["video_id"],
             "audio_source": "original_media",
@@ -232,7 +245,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         atomic_write_json(partial_path, records)
         volume.commit()
         card.unlink(missing_ok=True)
-        image_path.unlink(missing_ok=True)
+        for image_path in image_paths:
+            image_path.unlink(missing_ok=True)
         audio_path.unlink(missing_ok=True)
         done = len(selected)
         if done == 1 or done % 10 == 0 or done == len(questions):
