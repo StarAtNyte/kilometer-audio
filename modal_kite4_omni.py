@@ -57,18 +57,13 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
     ]
     filters = []
     for index in range(len(intervals)):
-        filters.extend(
-            [
-                (
-                    f"[{index}:v]setpts=PTS-STARTPTS,fps=1,scale=640:360:"
-                    "force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,"
-                    f"setsar=1[v{index}]"
-                ),
-                f"[{index}:a]asetpts=PTS-STARTPTS,aresample=16000[a{index}]",
-            ]
+        filters.append(
+            f"[{index}:v]setpts=PTS-STARTPTS,fps=1,scale=640:360:"
+            "force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,"
+            f"setsar=1[v{index}]"
         )
-    joined = "".join(f"[v{i}][a{i}]" for i in range(len(intervals)))
-    graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=1[outv][outa]"
+    joined = "".join(f"[v{i}]" for i in range(len(intervals)))
+    graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=0[outv]"
     result = subprocess.run(
         [
             "ffmpeg",
@@ -78,8 +73,6 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             graph,
             "-map",
             "[outv]",
-            "-map",
-            "[outa]",
             "-threads",
             "0",
             "-c:v",
@@ -88,10 +81,6 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
             "ultrafast",
             "-crf",
             "30",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "96k",
             str(partial),
         ],
         check=False,
@@ -155,7 +144,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         image_path = Path("/tmp") / f"kite4-{index}.jpg"
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
         subprocess.run(["ffmpeg", "-y", "-i", str(card), "-frames:v", "1", "-q:v", "5", str(image_path)], check=True, capture_output=True)
-        subprocess.run(["ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000", str(audio_path)], check=True, capture_output=True)
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "5", str(audio_path)], check=True, capture_output=True)
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
             for option_id, option in enumerate(payload["options"])
