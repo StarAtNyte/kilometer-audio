@@ -317,8 +317,12 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
                 card_path.unlink(missing_ok=True)
                 subprocess.run(["ffmpeg", "-y", "-i", evidence["video_path"], "-c", "copy", str(card_path)], check=True, capture_output=True)
         canonical_votes = [0] * 5
+        frame_path = Path("/tmp") / f"kite3-{split}-{card_index}.jpg"
+        subprocess.run(["ffmpeg", "-y", "-ss", "0", "-i", str(card_path), "-frames:v", "1", "-q:v", "5", str(frame_path)], check=True, capture_output=True)
         verifier_responses = []
-        for shift in range(5):
+        # One bounded image adjudication is sufficient here; KITE-4 performs
+        # the multi-view adjudication pass on the resulting evidence cards.
+        for shift in range(1):
             permutation = [(index + shift) % 5 for index in range(5)]
             displayed = [payload["options"][index] for index in permutation]
             options = "\n".join(f"{index}. {text}" for index, text in enumerate(displayed))
@@ -331,12 +335,10 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
                     "role": "user",
                     "content": [
                         {
-                            "type": "video",
-                            "video": card_path.resolve().as_uri(),
-                            "fps": 1.0,
+                            "type": "image",
+                            "image": frame_path.resolve().as_uri(),
                             "min_pixels": 32 * 32,
-                            "max_pixels": 384 * 384,
-                            "total_pixels": 96000 * 32 * 32,
+                            "max_pixels": 256 * 256,
                         },
                         {"type": "text", "text": answer_prompt},
                     ],
@@ -390,6 +392,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         evidence["verifier_responses"] = verifier_responses
         evidence["card_seconds"] = sum(end - start for start, end in intervals)
         card_path.unlink(missing_ok=True)
+        frame_path.unlink(missing_ok=True)
         done = card_index + 1
         if done == 1 or done % 10 == 0 or done == len(questions):
             print(f"[kite3] verification {done}/{len(questions)}", flush=True)
