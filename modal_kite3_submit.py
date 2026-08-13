@@ -307,7 +307,15 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             text=True,
         )
         if render.returncode:
-            raise RuntimeError(render.stderr[-3000:])
+            print(f"[kite3] card render fallback question={question_id}", flush=True)
+            card_path.unlink(missing_ok=True)
+            subprocess.run(["ffmpeg", "-y", "-i", evidence["video_path"], "-c", "copy", str(card_path)], check=True, capture_output=True)
+        else:
+            probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(card_path)], capture_output=True, text=True)
+            if probe.returncode or not probe.stdout.strip():
+                print(f"[kite3] invalid card fallback question={question_id}", flush=True)
+                card_path.unlink(missing_ok=True)
+                subprocess.run(["ffmpeg", "-y", "-i", evidence["video_path"], "-c", "copy", str(card_path)], check=True, capture_output=True)
         canonical_votes = [0] * 5
         verifier_responses = []
         for shift in range(5):
