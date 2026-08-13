@@ -181,8 +181,9 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         )
         prompt = (
             f"Question: {payload['question']}\nOptions:\n{options}\n"
-            "Use both the sound and images in the evidence video. Return only the chosen letter "
-            "inside answer tags."
+            "Use both the sound and images in the evidence video. Carefully verify exact counts, "
+            "times, and route/order relationships against the evidence; do not guess from plausibility. "
+            "Return only the chosen letter inside answer tags."
         )
         conversation = [
             {
