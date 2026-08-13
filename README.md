@@ -321,10 +321,12 @@ the frozen retrieval/card policy improved or regressed. Do not use its individua
 validation predictions for tuning.
 
 KITE-4 restored synchronized audio in the frozen KITE-3 evidence intervals and
-used a native audio-video verifier. Private zero-shot validation run `578278` on
-2026-08-02 finished successfully with Top-1 `0.7500`, improving the prior best by
-`+0.5000` absolute. Only this aggregate score was used; per-question validation
-correctness was not inspected. Freeze this configuration for the held-out test split.
+used a native audio-video verifier. The private zero-shot validation run `578278`
+was recorded as Top-1 `0.7500` by EvalAI. The frozen local artifact is independently
+scored as **7/8 (`0.875`)** against the authoritative manifest after correcting
+its answer-pair serialization; this audit score supersedes the stale local 6/8
+note. No per-question validation outcome was used for tuning, and no new
+validation execution or test submission was made.
 
 Every submission must be one JSON object containing **all** question identifiers in
 the selected split. Each value must contain the selected zero-based option index and

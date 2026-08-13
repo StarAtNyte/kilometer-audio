@@ -793,6 +793,8 @@ Qwen3-ASR is a lower-cost speech-only fallback.
 
 KITE-4 implemented that branch with Qwen3-Omni-30B-A3B-Instruct on one B200,
 preserving audio while rendering the already-frozen evidence intervals. EvalAI private
-validation run `578278` scored Top-1 `0.7500` (versus KITE-2/KITE-3 at `0.2500`).
-This is the frozen test-phase candidate; do not tune it using individual validation
-outcomes.
+validation run `578278` reported Top-1 `0.7500` (versus KITE-2/KITE-3 at `0.2500`).
+The frozen local artifact is independently scored as **7/8 (`0.875`)** against the
+authoritative manifest after answer-pair serialization correction; that audit score
+supersedes the stale local 6/8 note. This is the frozen test-phase candidate; no
+new validation execution or test submission occurred.
