@@ -53,7 +53,7 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
     ffmpeg_inputs = [
         item
         for start, end in intervals
-        for item in ("-ss", str(start), "-to", str(end), "-i", str(source))
+        for item in ("-ss", str(start), "-t", str(max(0.1, end - start)), "-i", str(source))
     ]
     filters = []
     for index in range(len(intervals)):
