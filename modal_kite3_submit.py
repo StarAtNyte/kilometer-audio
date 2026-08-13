@@ -247,10 +247,12 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
                     {
                         "type": "video",
                         "video": path.resolve().as_uri(),
-                        "fps": 1.0,
+                        # Keep grounding bounded: the proxy is already sparse, and
+                        # decoding all frames at full budget can stall one question.
+                        "fps": 0.2,
                         "min_pixels": 32 * 32,
-                        "max_pixels": 384 * 384,
-                        "total_pixels": 96000 * 32 * 32,
+                        "max_pixels": 256 * 256,
+                        "total_pixels": 20000 * 32 * 32,
                     },
                     {"type": "text", "text": prompt},
                 ],
