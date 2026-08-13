@@ -275,7 +275,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         ffmpeg_inputs = [
             item
             for start, end in intervals
-            for item in ("-ss", str(start), "-to", str(end), "-i", evidence["video_path"])
+            for item in ("-ss", str(start), "-t", str(max(0.1, end - start)), "-i", evidence["video_path"])
         ]
         filters = [
             f"[{index}:v]setpts=PTS-STARTPTS,fps=1,scale=640:360:"
