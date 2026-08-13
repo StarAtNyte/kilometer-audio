@@ -149,7 +149,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             continue
         row = evidence[question_id]
         print(f"[kite4] question {index + 1}/{len(questions)} id={question_id}", flush=True)
-        source = SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"
+        source = Path(row.get("video_path") or (SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"))
         card = Path("/tmp") / f"kite4-{index}.mp4"
         render_av_card(source, row["intervals"], card)
         image_path = Path("/tmp") / f"kite4-{index}.jpg"
