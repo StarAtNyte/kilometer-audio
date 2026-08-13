@@ -143,7 +143,11 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         render_av_card(source, row["intervals"], card)
         image_path = Path("/tmp") / f"kite4-{index}.jpg"
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
-        subprocess.run(["ffmpeg", "-y", "-i", str(card), "-frames:v", "1", "-q:v", "5", str(image_path)], check=True, capture_output=True)
+        image_render = subprocess.run(["ffmpeg", "-y", "-i", str(card), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True)
+        if image_render.returncode or not image_path.exists():
+            # Sparse proxy may not overlap a requested interval; use its first
+            # frame so adjudication remains resumable rather than aborting.
+            subprocess.run(["ffmpeg", "-y", "-ss", "0", "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], check=True, capture_output=True)
         subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "5", str(audio_path)], check=True, capture_output=True)
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
