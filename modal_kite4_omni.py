@@ -13,6 +13,7 @@ from kite_core import SHARED_VIDEO_ROOT, TRACK_ROOT, atomic_write_json, build_su
 
 VOLUME_NAME = "perception-test-2026-data"
 MODEL_NAME = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
+UNUSABLE_VIDEOS = {"yzDPjzyl-ek", "idx41AgnL6U", "oj_G_Dc9RBM", "V_Yl5Fwujqs", "n2o2EzjaBfE", "V-43u9V8k0s"}
 
 app = modal.App("kilometer-audio-kite4-omni")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
@@ -114,6 +115,9 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
     evidence = json.loads(
         (TRACK_ROOT / "predictions" / split / "kite3_evidence.json").read_text()
     )
+    fallback = json.loads(
+        (TRACK_ROOT / "predictions" / split / "audio_rag_submission.json").read_text()
+    )
     cache = TRACK_ROOT / "models" / "huggingface"
     model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
         MODEL_NAME,
@@ -138,7 +142,15 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             continue
         row = evidence[question_id]
         print(f"[kite4] question {index + 1}/{len(questions)} id={question_id}", flush=True)
-        source = Path(row.get("video_path") or (SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"))
+        source = SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"
+        if row["video_id"] in UNUSABLE_VIDEOS or not source.exists():
+            answer_id = int(fallback[question_id]["answer_id"])
+            selected[question_id] = answer_id
+            records[question_id] = {"answer_id": answer_id, "fallback": True, "fallback_reason": "unusable_media", "video_id": row["video_id"], "source": "audio_rag_submission"}
+            atomic_write_json(partial_path, records)
+            volume.commit()
+            print(f"[kite4] fallback {len(selected)}/{len(questions)} id={question_id} video={row['video_id']}", flush=True)
+            continue
         card = Path("/tmp") / f"kite4-{index}.mp4"
         render_av_card(source, row["intervals"], card)
         image_path = Path("/tmp") / f"kite4-{index}.jpg"
@@ -148,7 +160,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             # Sparse proxy may not overlap a requested interval; use its first
             # frame so adjudication remains resumable rather than aborting.
             subprocess.run(["ffmpeg", "-y", "-ss", "0", "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], check=True, capture_output=True)
-        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "5", str(audio_path)], check=True, capture_output=True)
+        start, end = row["intervals"][0]
+        subprocess.run(["ffmpeg", "-y", "-ss", str(start), "-i", str(source), "-t", str(max(0.1, end - start)), "-vn", "-ac", "1", "-ar", "16000", str(audio_path)], check=True, capture_output=True)
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
             for option_id, option in enumerate(payload["options"])
@@ -212,6 +225,9 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             "response": response,
             "intervals": row["intervals"],
             "card_seconds": sum(end - start for start, end in row["intervals"]),
+            "fallback": False,
+            "video_id": row["video_id"],
+            "audio_source": "original_media",
         }
         atomic_write_json(partial_path, records)
         volume.commit()
