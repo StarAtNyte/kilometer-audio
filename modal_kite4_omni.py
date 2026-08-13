@@ -152,6 +152,10 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         source = SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"
         card = Path("/tmp") / f"kite4-{index}.mp4"
         render_av_card(source, row["intervals"], card)
+        image_path = Path("/tmp") / f"kite4-{index}.jpg"
+        audio_path = Path("/tmp") / f"kite4-{index}.wav"
+        subprocess.run(["ffmpeg", "-y", "-i", str(card), "-frames:v", "1", "-q:v", "5", str(image_path)], check=True, capture_output=True)
+        subprocess.run(["ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000", str(audio_path)], check=True, capture_output=True)
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
             for option_id, option in enumerate(payload["options"])
@@ -165,7 +169,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             {
                 "role": "user",
                 "content": [
-                    {"type": "video", "video": card.resolve().as_uri()},
+                    {"type": "image", "image": image_path.resolve().as_uri()},
+                    {"type": "audio", "audio": audio_path.resolve().as_uri()},
                     {"type": "text", "text": prompt},
                 ],
             }
@@ -218,6 +223,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         atomic_write_json(partial_path, records)
         volume.commit()
         card.unlink(missing_ok=True)
+        image_path.unlink(missing_ok=True)
+        audio_path.unlink(missing_ok=True)
         done = len(selected)
         if done == 1 or done % 10 == 0 or done == len(questions):
             elapsed = time.monotonic() - started
