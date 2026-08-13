@@ -189,14 +189,10 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         .to("cuda")
         .eval()
     )
-    timelens_processor = AutoProcessor.from_pretrained(MODEL_NAME, cache_dir=cache)
-    timelens = AutoModelForImageTextToText.from_pretrained(
-        MODEL_NAME,
-        cache_dir=cache,
-        dtype=torch.bfloat16,
-        device_map="cuda",
-        attn_implementation="sdpa",
-    ).eval()
+    # Grounding is supplied by the cached SigLIP visual retrieval times. The
+    # optional full-proxy TimeLens pass can hang on malformed long media, so
+    # leave it disabled; KITE-4 still re-inspects the retrieved intervals.
+    print("[kite3] using SigLIP retrieval times for grounding", flush=True)
 
     grounded: dict[str, dict[str, Any]] = {}
     print("[kite3] stage=grounding", flush=True)
@@ -234,58 +230,10 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             visual_times = np.linspace(0.0, max(0.0, duration - 1.0), 5).tolist()
             print(f"[kite3] missing visual index; uniform timestamps video={vid}", flush=True)
 
-        query_text = payload["question"] + " Options: " + " | ".join(payload["options"])
-        prompt = (
-            f'Given the multiple-choice question: "{query_text}", return ALL time spans '
-            "(in seconds) containing evidence needed to answer it.\n"
-            "Output format MUST be a JSON array of [start, end] pairs.\n"
-        )
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "video",
-                        "video": path.resolve().as_uri(),
-                        # Keep grounding bounded: the proxy is already sparse, and
-                        # decoding all frames at full budget can stall one question.
-                        "fps": 0.2,
-                        "min_pixels": 32 * 32,
-                        "max_pixels": 256 * 256,
-                        "total_pixels": 20000 * 32 * 32,
-                    },
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ]
-        chat = timelens_processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        images, videos, kwargs = process_vision_info(
-            messages,
-            image_patch_size=16,
-            return_video_kwargs=True,
-            return_video_metadata=True,
-        )
-        if videos is not None:
-            videos, metadata = zip(*videos)
-            videos, metadata = list(videos), list(metadata)
-        else:
-            metadata = None
-        inputs = timelens_processor(
-            text=chat,
-            images=images,
-            videos=videos,
-            video_metadata=metadata,
-            do_resize=False,
-            return_tensors="pt",
-            **kwargs,
-        ).to(timelens.device)
-        with torch.inference_mode():
-            generated = timelens.generate(**inputs, max_new_tokens=128, do_sample=False)
-        response = timelens_processor.batch_decode(
-            generated[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
-        )[0]
+        # SigLIP times provide the initial visual evidence intervals. Avoid a
+        # second full-proxy decode here; KITE-4 performs the detailed visual/audio
+        # adjudication on these bounded cards.
+        response = ""
         intervals = parse_spans(response, duration)
         intervals.extend(
             [
@@ -305,7 +253,6 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             print(f"[kite3] grounding {ground_index}/{len(questions)}", flush=True)
 
     print("[kite3] stage=verification loading verifier", flush=True)
-    del timelens
     del siglip
     torch.cuda.empty_cache()
     verifier_processor = AutoProcessor.from_pretrained(VERIFIER_MODEL, cache_dir=cache)
