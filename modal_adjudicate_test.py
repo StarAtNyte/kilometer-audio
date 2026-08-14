@@ -14,7 +14,7 @@ MOSS_THRESHOLD = 0.80
 
 app = modal.App("kilometer-audio-moss-adjudication")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
-image = modal.Image.debian_slim(python_version="3.11")
+image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kite_core")
 
 
 @app.function(image=image, volumes={"/data": volume}, timeout=30 * 60)
