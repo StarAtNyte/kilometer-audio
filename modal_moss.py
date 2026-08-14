@@ -197,7 +197,7 @@ def generate_moss_submission(split: str = "validation") -> dict[str, Any]:
             (float(start) + float(end)) / 2.0
             for start, end in evidence_intervals
             if float(end) > float(start)
-        ][:5]
+        ][:1]
         if not candidate_times:
             candidate_times = _candidate_times(payload, video_id)
         canonical_scores = [0.0] * 5
