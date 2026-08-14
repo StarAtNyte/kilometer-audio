@@ -21,6 +21,7 @@ from kite_core import (
 APP_NAME = "kilometer-audio-moss"
 VOLUME_NAME = "perception-test-2026-data"
 MODEL_NAME = os.getenv("KITE_MOSS_MODEL", "OpenMOSS-Team/MOSS-Audio-8B-Thinking")
+UNUSABLE_VIDEOS = {"yzDPjzyl-ek", "idx41AgnL6U", "oj_G_Dc9RBM", "V_Yl5Fwujqs", "n2o2EzjaBfE", "V-43u9V8k0s"}
 
 app = modal.App(APP_NAME)
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
@@ -183,6 +184,12 @@ def generate_moss_submission(split: str = "validation") -> dict[str, Any]:
         candidate_token_ids.append(token_ids[0])
     for question_id, payload in questions.items():
         video_id = _video_id(payload)
+        if video_id in UNUSABLE_VIDEOS or not (TRACK_ROOT / "audio" / f"{video_id}.wav").exists():
+            # KITE-4 owns the six unusable-video fallbacks; keep a schema-valid
+            # placeholder here so the adjudicator can preserve those answers.
+            selected[question_id] = 0
+            evidence[question_id] = {"fallback": True, "fallback_reason": "unusable_media"}
+            continue
         candidate_times = _candidate_times(payload, video_id)
         canonical_scores = [0.0] * 5
         responses: list[dict[str, Any]] = []
