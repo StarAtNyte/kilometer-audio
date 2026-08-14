@@ -92,6 +92,58 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
     return audit
 
 
+@app.function(image=image, volumes={"/data": volume}, timeout=30 * 60)
+def audit_test() -> dict[str, Any]:
+    volume.reload()
+    root = TRACK_ROOT / "predictions" / "test"
+    questions = json.loads((TRACK_ROOT / "manifests" / "test_questions.json").read_text())
+    submission = json.loads((root / "kite5_moss_adjudicated_submission.json").read_text())
+    evidence = json.loads((root / "kite5_moss_adjudicated_evidence.json").read_text())
+    baseline = json.loads((root / "kite4_omni_submission.json").read_text())
+    errors = []
+    invalid_intervals = []
+    negative_cards = []
+    original_audio = 0
+    fallback_questions = []
+    changed = 0
+    for question_id in questions:
+        if question_id not in submission or question_id not in evidence:
+            errors.append(f"missing:{question_id}")
+            continue
+        row = evidence[question_id]
+        if int(submission[question_id]["answer_id"]) != int(row["answer_id"]):
+            errors.append(f"answer_mismatch:{question_id}")
+        if int(submission[question_id]["answer_id"]) != int(baseline[question_id]["answer_id"]):
+            changed += 1
+        if row.get("fallback"):
+            fallback_questions.append(question_id)
+        else:
+            original_audio += 1
+        for interval in row.get("kite4_evidence", {}).get("intervals", []):
+            if len(interval) != 2 or not (0 <= float(interval[0]) < float(interval[1])):
+                invalid_intervals.append(question_id)
+        if float(row.get("kite4_evidence", {}).get("card_seconds", 0)) < 0:
+            negative_cards.append(question_id)
+    audit = {
+        "split": "test", "manifest_questions": len(questions),
+        "submission_questions": len(submission), "evidence_questions": len(evidence),
+        "missing_or_schema_errors": errors, "invalid_intervals": invalid_intervals,
+        "negative_card_durations": negative_cards, "original_audio_questions": original_audio,
+        "fallback_count": len(fallback_questions), "fallback_question_ids": sorted(fallback_questions),
+        "answer_changes_vs_kite4": changed, "threshold": MOSS_THRESHOLD,
+        "validation_answers_used": False, "evalai_submitted": False,
+    }
+    atomic_write_json(root / "kite5_moss_adjudicated_audit.json", audit)
+    volume.commit()
+    return audit
+
+
 @app.local_entrypoint()
-def main(threshold: float = MOSS_THRESHOLD) -> None:
-    print(json.dumps(adjudicate_test.remote(threshold), indent=2))
+def main(action: str = "adjudicate", threshold: float = MOSS_THRESHOLD) -> None:
+    if action == "adjudicate":
+        result = adjudicate_test.remote(threshold)
+    elif action == "audit":
+        result = audit_test.remote()
+    else:
+        raise ValueError(f"unknown action: {action}")
+    print(json.dumps(result, indent=2))
