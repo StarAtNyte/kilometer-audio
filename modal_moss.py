@@ -150,6 +150,8 @@ def generate_moss_submission(split: str = "validation") -> dict[str, Any]:
     volume.reload()
     questions_path = TRACK_ROOT / "manifests" / f"{split}_questions.json"
     questions = json.loads(questions_path.read_text())
+    evidence_path = TRACK_ROOT / "predictions" / split / "kite3_evidence.json"
+    existing_evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else {}
     model_dir = TRACK_ROOT / "models" / "moss" / MODEL_NAME.rsplit("/", 1)[-1]
     if not model_dir.exists() or not any(model_dir.iterdir()):
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -190,7 +192,14 @@ def generate_moss_submission(split: str = "validation") -> dict[str, Any]:
             selected[question_id] = 0
             evidence[question_id] = {"fallback": True, "fallback_reason": "unusable_media"}
             continue
-        candidate_times = _candidate_times(payload, video_id)
+        evidence_intervals = existing_evidence.get(question_id, {}).get("intervals", [])
+        candidate_times = [
+            (float(start) + float(end)) / 2.0
+            for start, end in evidence_intervals
+            if float(end) > float(start)
+        ][:5]
+        if not candidate_times:
+            candidate_times = _candidate_times(payload, video_id)
         canonical_scores = [0.0] * 5
         responses: list[dict[str, Any]] = []
         for candidate_index, center in enumerate(candidate_times):
