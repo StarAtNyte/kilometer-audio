@@ -40,6 +40,18 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
         video_id = k4e.get("video_id", payload.get("video_id", ""))
         is_fallback = bool(k4e.get("fallback")) or video_id in FALLBACK_VIDEOS
         me = moss_evidence[question_id]
+        source_duration = 0.0
+        media_path = TRACK_ROOT / "manifests" / "media" / f"{video_id}.json"
+        if media_path.exists():
+            media = json.loads(media_path.read_text())
+            source_duration = float(media.get("format", {}).get("duration", 0.0))
+        raw_intervals = k4e.get("intervals", [])
+        intervals = []
+        for start, end in raw_intervals:
+            start = max(0.0, min(source_duration, float(start)))
+            end = max(0.0, min(source_duration, float(end)))
+            if end > start:
+                intervals.append([start, end])
         scores = me.get("aggregation", {}).get("scores", [])
         total = sum(float(x) for x in scores)
         confidence = max(scores) / total if scores and total > 0 else 0.0
@@ -61,6 +73,11 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
             "fallback_reason": k4e.get("fallback_reason") if is_fallback else None,
             "kite4_answer_id": int(kite4[question_id]["answer_id"]),
             "moss_answer_id": int(moss[question_id]["answer_id"]),
+            "video_id": video_id,
+            "audio_source": "original_media" if not is_fallback else "fallback",
+            "source_duration": source_duration,
+            "intervals": intervals,
+            "card_seconds": sum(end - start for start, end in intervals),
             "kite4_evidence": k4e,
         }
     submission = build_submission(questions, selected)
@@ -119,10 +136,10 @@ def audit_test() -> dict[str, Any]:
             fallback_questions.append(question_id)
         else:
             original_audio += 1
-        for interval in row.get("kite4_evidence", {}).get("intervals", []):
+        for interval in row.get("intervals", []):
             if len(interval) != 2 or not (0 <= float(interval[0]) < float(interval[1])):
                 invalid_intervals.append(question_id)
-        if float(row.get("kite4_evidence", {}).get("card_seconds", 0)) < 0:
+        if float(row.get("card_seconds", 0)) < 0:
             negative_cards.append(question_id)
     audit = {
         "split": "test", "manifest_questions": len(questions),
