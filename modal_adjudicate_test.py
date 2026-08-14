@@ -59,7 +59,7 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
             "moss_threshold": threshold,
             "fallback": is_fallback,
             "fallback_reason": k4e.get("fallback_reason") if is_fallback else None,
-            "kite4_answer_id": int(k4[question_id]["answer_id"]),
+            "kite4_answer_id": int(kite4[question_id]["answer_id"]),
             "moss_answer_id": int(moss[question_id]["answer_id"]),
             "kite4_evidence": k4e,
         }
