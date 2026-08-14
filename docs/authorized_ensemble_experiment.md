@@ -8,6 +8,12 @@ execution or EvalAI submission was made.
 
 ## Candidates and results
 
+Candidate configuration and boundaries:
+
+- **MOSS MCQ candidates:** frozen `mcq-checkpoint-500` and `mcq-checkpoint-741`, evaluated only from authorized train-derived dev/holdout prediction artifacts; parse coverage was 100%.
+- **KITE-4-style candidate:** the existing Qwen3-Omni audio/video implementation in `modal_kite4_omni.py`; its frozen KilometerAudio validation artifact was not rerun or used for tuning in this experiment, so no authorized-fold KITE-4 score is claimed.
+- **Routing/ensemble candidate:** `authorized_ensemble_experiment.py`, which averages canonical-option probabilities from the two MOSS candidates and uses deterministic tie handling.
+
 | Candidate | Fold | Questions | Correct | Accuracy |
 |---|---:|---:|---:|---:|
 | MCQ checkpoint-500 | dev | 753 | 405 | 53.78% |
