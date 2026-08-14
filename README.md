@@ -325,8 +325,14 @@ used a native audio-video verifier. The private zero-shot validation run `578278
 was recorded as Top-1 `0.7500` by EvalAI. The frozen local artifact is independently
 scored as **7/8 (`0.875`)** against the authoritative manifest after correcting
 its answer-pair serialization; this audit score supersedes the stale local 6/8
-note. No per-question validation outcome was used for tuning, and no new
-validation execution or test submission was made.
+note. No per-question validation outcome was used for tuning. The private KITE-5
+KITE-4-primary/MOSS-adjudicated test artifact was submitted as run `579160` on
+2026-08-14 and finished with Top-1 **0.338**. This is the current best private
+score, improving over the preserved run `579002` at `0.336`. The KITE-5 artifact
+contained 500 questions, 488 original-audio questions, and 12 documented fallbacks;
+its submission and evidence remain private on the Modal Volume. The run was
+submitted only after explicit approval; no additional run is authorized by this
+record.
 
 Every submission must be one JSON object containing **all** question identifiers in
 the selected split. Each value must contain the selected zero-based option index and

@@ -9,8 +9,8 @@
 - MOSS overrides: 8; answer changes versus KITE-4: 3.
 - Original audio: 488 questions; fallbacks: exactly 12 questions from the six known unusable videos.
 - Invalid intervals: 0; negative card durations: 0.
-- Validation answers used: false; EvalAI submitted: false.
-- Existing private submission `579002` was not modified.
+- Validation answers used: false; private EvalAI run `579160` finished with Top-1 `0.338`.
+- Existing private submission `579002` was not modified; its Top-1 `0.336` remains the fallback.
 
 Generated submission, evidence, and audit files remain only in the private Modal
 Volume under `2706-kilometer-audio/predictions/test/`; they are not tracked here.
