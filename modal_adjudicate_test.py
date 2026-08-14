@@ -27,6 +27,10 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
     moss = json.loads((root / "frozen_mcq_submission.json").read_text())
     moss_evidence = json.loads((root / "frozen_mcq_evidence.json").read_text())
     fallback = set()
+    missing_k4 = sorted(set(questions) - set(kite4))
+    missing_moss = sorted(set(questions) - set(moss))
+    if missing_k4 or missing_moss:
+        raise ValueError(f"coverage mismatch missing_k4={missing_k4[:3]} missing_moss={missing_moss[:3]}")
     selected: dict[str, int] = {}
     evidence: dict[str, Any] = {}
     switches: list[str] = []
@@ -40,7 +44,7 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
         total = sum(float(x) for x in scores)
         confidence = max(scores) / total if scores and total > 0 else 0.0
         use_moss = not is_fallback and confidence >= threshold
-        answer_id = int(moss[question_id]["answer_id"] if use_moss else k4[question_id]["answer_id"])
+        answer_id = int(moss[question_id]["answer_id"] if use_moss else kite4[question_id]["answer_id"])
         selected[question_id] = answer_id
         if is_fallback:
             fallback.add(question_id)
