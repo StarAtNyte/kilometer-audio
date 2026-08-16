@@ -63,8 +63,8 @@ def overlaps(interval: list[float], span: dict[str, Any]) -> bool:
 
 @app.function(image=cpu_image, volumes={"/data": volume}, timeout=2 * 60 * 60)
 def materialize_timeline(fold: str = "dev", timeline_index: int = 0) -> dict[str, Any]:
-    if fold != "dev":
-        raise ValueError("Model selection is restricted to train-derived dev")
+    if fold not in {"dev", "holdout"}:
+        raise ValueError("Only authorized train-derived dev or holdout is allowed")
     volume.reload()
     timelines = json.loads((ROOT / "virtual" / fold / "timelines.json").read_text())
     source = timelines[timeline_index]
@@ -170,8 +170,8 @@ def smoke_grounding(fold: str = "dev", timeline_index: int = 0, limit: int = 12)
     from qwen_vl_utils import process_vision_info
     from transformers import AutoModelForImageTextToText, AutoProcessor
 
-    if fold != "dev":
-        raise ValueError("Model selection is restricted to train-derived dev")
+    if fold not in {"dev", "holdout"}:
+        raise ValueError("Only authorized train-derived dev or holdout is allowed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     materialized = json.loads((ROOT / "materialized" / fold / f"{timeline_id}.json").read_text())
@@ -285,8 +285,8 @@ def smoke_grounding(fold: str = "dev", timeline_index: int = 0, limit: int = 12)
 
 @app.function(image=cpu_image, volumes={"/data": volume}, timeout=30 * 60)
 def compare_smoke(fold: str = "dev", timeline_index: int = 0, limit: int = 24) -> dict[str, Any]:
-    if fold != "dev":
-        raise ValueError("Model selection is restricted to train-derived dev")
+    if fold not in {"dev", "holdout"}:
+        raise ValueError("Only authorized train-derived dev or holdout is allowed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     evaluation = ROOT / "evaluations" / fold
@@ -334,6 +334,12 @@ def compare_smoke(fold: str = "dev", timeline_index: int = 0, limit: int = 24) -
     return summary
 
 
+def needs_temporal_resolution(question: str) -> bool:
+    text = question.lower()
+    markers = ("how many", "how often", "how long", "first", "last", "before", "after", "between", "order", "sequence", "times")
+    return any(marker in text for marker in markers)
+
+
 def merge_intervals(intervals: list[list[float]], gap: float = 2.0) -> list[list[float]]:
     merged: list[list[float]] = []
     for start, end in sorted(intervals):
@@ -348,8 +354,8 @@ def merge_intervals(intervals: list[list[float]], gap: float = 2.0) -> list[list
 def build_evidence_cards(
     fold: str = "dev", timeline_index: int = 0, limit: int = 24
 ) -> dict[str, Any]:
-    if fold != "dev":
-        raise ValueError("Model selection is restricted to train-derived dev")
+    if fold not in {"dev", "holdout"}:
+        raise ValueError("Only authorized train-derived dev or holdout is allowed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     evaluation = ROOT / "evaluations" / fold
@@ -483,8 +489,8 @@ def verify_cards(
     from qwen_vl_utils import process_vision_info
     from transformers import AutoModelForImageTextToText, AutoProcessor
 
-    if fold != "dev":
-        raise ValueError("Model selection is restricted to train-derived dev")
+    if fold not in {"dev", "holdout"}:
+        raise ValueError("Only authorized train-derived dev or holdout is allowed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     cards_path = ROOT / "evaluations" / fold / "cards" / f"{timeline_id}-24.jsonl"
@@ -540,6 +546,7 @@ def verify_cards(
                 raise RuntimeError(rendering.stderr[-3000:])
             inference_video = card_video
         options = "\n".join(f"{index}. {text}" for index, text in enumerate(card["options"]))
+        evidence_fps = 2.0 if needs_temporal_resolution(card["question"]) else 1.0
         if constrained or neutral_prompt:
             instruction = "Respond with exactly one digit: 0, 1, 2, 3, or 4."
         else:
@@ -552,7 +559,7 @@ def verify_cards(
                     {
                         "type": "video",
                         "video": inference_video.resolve().as_uri(),
-                        "fps": 1.0,
+                        "fps": evidence_fps,
                         "min_pixels": 32 * 32,
                         "max_pixels": 384 * 384,
                         "total_pixels": 96000 * 32 * 32,
