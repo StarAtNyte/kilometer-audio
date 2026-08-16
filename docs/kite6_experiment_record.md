@@ -11,7 +11,7 @@
   transfer sample. Full holdout CLAP retrieval evaluation covered 708 MCQs.
 - Modal generation: `ap-yeu4F9wAKczVv37TdmVgZJ`.
 - Modal adjudication: `ap-7qDEOfCwgRqVVYIt29RqhF`.
-- Modal audit: `ap-adzvMTTVfcYSuAYjVqCKFw`.
+- Modal audit: `ap-UiXB1osRQDkfcuMfLAZHvG`.
 - Test artifact: private Volume files `kite6_omni_submission.json`,
   `kite6_omni_evidence.json`, `kite6_moss_adjudicated_submission.json`, and
   `kite6_moss_adjudicated_evidence.json`.
