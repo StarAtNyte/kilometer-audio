@@ -235,9 +235,21 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         )
         inputs = inputs.to(model.device).to(model.dtype)
         with torch.inference_mode():
-            output = model(**inputs, use_audio_in_video=True)
+            generated = model.generate(
+                **inputs,
+                return_audio=False,
+                thinker_return_dict_in_generate=True,
+                output_scores=True,
+                use_audio_in_video=True,
+                max_new_tokens=1,
+                do_sample=False,
+            )
+        sequences = generated.sequences if hasattr(generated, "sequences") else generated
+        score_rows = getattr(generated, "scores", None)
+        if not score_rows:
+            raise ValueError(f"Missing constrained scores for {question_id}")
         answer_id, digit_scores = select_constrained_digit(
-            output.logits[0, -1], processor.tokenizer
+            score_rows[0][0], processor.tokenizer
         )
         response = str(answer_id)
         selected[question_id] = answer_id
