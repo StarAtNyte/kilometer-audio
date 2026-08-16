@@ -156,7 +156,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
     model.disable_talker()
     processor = Qwen3OmniMoeProcessor.from_pretrained(MODEL_NAME, cache_dir=cache)
     output = TRACK_ROOT / "predictions" / split
-    partial_path = output / "kite4_omni_partial.json"
+    partial_path = output / "kite6_omni_partial.json"
     records: dict[str, Any] = (
         json.loads(partial_path.read_text()) if partial_path.exists() else {}
     )
@@ -263,13 +263,13 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             print(f"[kite4] answered {done}/{len(questions)} elapsed={elapsed/60:.1f}m rate={rate:.2f}/s", flush=True)
     print("[kite4] writing artifacts", flush=True)
     submission = build_submission(questions, selected)
-    atomic_write_json(output / "kite4_omni_submission.json", submission)
-    atomic_write_json(output / "kite4_omni_evidence.json", records)
+    atomic_write_json(output / "kite6_omni_submission.json", submission)
+    atomic_write_json(output / "kite6_omni_evidence.json", records)
     volume.commit()
     return {
         "questions": len(submission),
         "model": MODEL_NAME,
-        "submission_path": str(output / "kite4_omni_submission.json"),
+        "submission_path": str(output / "kite6_omni_submission.json"),
     }
 
 

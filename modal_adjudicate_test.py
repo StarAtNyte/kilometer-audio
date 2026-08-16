@@ -18,16 +18,16 @@ image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("
 
 
 @app.function(image=image, volumes={"/data": volume}, timeout=30 * 60)
-def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
+def adjudicate_test(threshold: float = MOSS_THRESHOLD, primary_prefix: str = "kite4_omni", output_prefix: str = "kite5_moss_adjudicated") -> dict[str, Any]:
     volume.reload()
     root = TRACK_ROOT / "predictions" / "test"
     questions = json.loads((TRACK_ROOT / "manifests" / "test_questions.json").read_text())
-    kite4 = json.loads((root / "kite4_omni_submission.json").read_text())
-    kite4_evidence = json.loads((root / "kite4_omni_evidence.json").read_text())
+    primary = json.loads((root / f"{primary_prefix}_submission.json").read_text())
+    primary_evidence = json.loads((root / f"{primary_prefix}_evidence.json").read_text())
     moss = json.loads((root / "frozen_mcq_submission.json").read_text())
     moss_evidence = json.loads((root / "frozen_mcq_evidence.json").read_text())
     fallback = set()
-    missing_k4 = sorted(set(questions) - set(kite4))
+    missing_k4 = sorted(set(questions) - set(primary))
     missing_moss = sorted(set(questions) - set(moss))
     if missing_k4 or missing_moss:
         raise ValueError(f"coverage mismatch missing_k4={missing_k4[:3]} missing_moss={missing_moss[:3]}")
@@ -35,8 +35,8 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
     evidence: dict[str, Any] = {}
     switches: list[str] = []
     for question_id, payload in questions.items():
-        k4 = kite4[question_id]
-        k4e = kite4_evidence[question_id]
+        k4 = primary[question_id]
+        k4e = primary_evidence[question_id]
         video_id = k4e.get("video_id", payload.get("video_id", ""))
         is_fallback = bool(k4e.get("fallback")) or video_id in FALLBACK_VIDEOS
         me = moss_evidence[question_id]
@@ -56,7 +56,7 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
         total = sum(float(x) for x in scores)
         confidence = max(scores) / total if scores and total > 0 else 0.0
         use_moss = not is_fallback and confidence >= threshold
-        answer_id = int(moss[question_id]["answer_id"] if use_moss else kite4[question_id]["answer_id"])
+        answer_id = int(moss[question_id]["answer_id"] if use_moss else primary[question_id]["answer_id"])
         selected[question_id] = answer_id
         if is_fallback:
             fallback.add(question_id)
@@ -64,14 +64,14 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
             switches.append(question_id)
         evidence[question_id] = {
             "answer_id": answer_id,
-            "primary": "kite4_omni",
+            "primary": primary_prefix,
             "adjudicator": "moss_mcq_checkpoint_741",
             "decision": "moss_override" if use_moss else "kite4_primary",
             "moss_confidence": confidence,
             "moss_threshold": threshold,
             "fallback": is_fallback,
             "fallback_reason": k4e.get("fallback_reason") if is_fallback else None,
-            "kite4_answer_id": int(kite4[question_id]["answer_id"]),
+            "primary_answer_id": int(primary[question_id]["answer_id"]),
             "moss_answer_id": int(moss[question_id]["answer_id"]),
             "video_id": video_id,
             "audio_source": "original_media" if not is_fallback else "fallback",
@@ -84,16 +84,16 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
     errors = validate_predictions(questions, submission)
     if errors:
         raise ValueError("Invalid adjudicated submission: " + "; ".join(errors))
-    output_submission = root / "kite5_moss_adjudicated_submission.json"
-    output_evidence = root / "kite5_moss_adjudicated_evidence.json"
-    output_audit = root / "kite5_moss_adjudicated_audit.json"
+    output_submission = root / f"{output_prefix}_submission.json"
+    output_evidence = root / f"{output_prefix}_evidence.json"
+    output_audit = root / f"{output_prefix}_audit.json"
     atomic_write_json(output_submission, submission)
     atomic_write_json(output_evidence, evidence)
     audit = {
         "split": "test",
         "questions": len(questions),
         "threshold": threshold,
-        "primary": "kite4_omni",
+        "primary": primary_prefix,
         "adjudicator": "moss_mcq_checkpoint_741",
         "switch_count": len(switches),
         "switch_question_ids": switches,
@@ -110,13 +110,13 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD) -> dict[str, Any]:
 
 
 @app.function(image=image, volumes={"/data": volume}, timeout=30 * 60)
-def audit_test() -> dict[str, Any]:
+def audit_test(output_prefix: str = "kite5_moss_adjudicated", baseline_prefix: str = "kite4_omni") -> dict[str, Any]:
     volume.reload()
     root = TRACK_ROOT / "predictions" / "test"
     questions = json.loads((TRACK_ROOT / "manifests" / "test_questions.json").read_text())
-    submission = json.loads((root / "kite5_moss_adjudicated_submission.json").read_text())
-    evidence = json.loads((root / "kite5_moss_adjudicated_evidence.json").read_text())
-    baseline = json.loads((root / "kite4_omni_submission.json").read_text())
+    submission = json.loads((root / f"{output_prefix}_submission.json").read_text())
+    evidence = json.loads((root / f"{output_prefix}_evidence.json").read_text())
+    baseline = json.loads((root / f"{baseline_prefix}_submission.json").read_text())
     errors = []
     invalid_intervals = []
     negative_cards = []
@@ -156,11 +156,11 @@ def audit_test() -> dict[str, Any]:
 
 
 @app.local_entrypoint()
-def main(action: str = "adjudicate", threshold: float = MOSS_THRESHOLD) -> None:
+def main(action: str = "adjudicate", threshold: float = MOSS_THRESHOLD, primary_prefix: str = "kite4_omni", output_prefix: str = "kite5_moss_adjudicated", baseline_prefix: str = "kite4_omni") -> None:
     if action == "adjudicate":
-        result = adjudicate_test.remote(threshold)
+        result = adjudicate_test.remote(threshold, primary_prefix, output_prefix)
     elif action == "audit":
-        result = audit_test.remote()
+        result = audit_test.remote(output_prefix, baseline_prefix)
     else:
         raise ValueError(f"unknown action: {action}")
     print(json.dumps(result, indent=2))
