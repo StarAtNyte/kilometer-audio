@@ -147,7 +147,7 @@ def audit_test(output_prefix: str = "kite5_moss_adjudicated", baseline_prefix: s
         "missing_or_schema_errors": errors, "invalid_intervals": invalid_intervals,
         "negative_card_durations": negative_cards, "original_audio_questions": original_audio,
         "fallback_count": len(fallback_questions), "fallback_question_ids": sorted(fallback_questions),
-        "answer_changes_vs_kite4": changed, "threshold": MOSS_THRESHOLD,
+        "answer_changes_vs_baseline": changed, "baseline_prefix": baseline_prefix, "threshold": MOSS_THRESHOLD,
         "validation_answers_used": False, "evalai_submitted": False,
     }
     atomic_write_json(root / "kite5_moss_adjudicated_audit.json", audit)
