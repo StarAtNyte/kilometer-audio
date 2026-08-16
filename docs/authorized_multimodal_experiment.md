@@ -1,4 +1,4 @@
-# Authorized multimodal experiment (in progress)
+# Authorized multimodal experiment
 
 All results in this record use only the official Perception Test train-derived
 folds. KilometerAudio validation/test labels were not used.
@@ -34,8 +34,9 @@ bounded temporal policy and uses constrained next-token digit scoring for the
 five options, retaining per-option logits in evidence. This source change is
 not yet run on KilometerAudio test.
 
-## Next gate
+## Promotion decision
 
-Build the complete holdout SigLIP lattice, evaluate the union and temporal
-sampling on the untouched holdout, and promote only a policy that beats the
-frozen baseline. No new EvalAI submission is authorized by this record.
+The holdout transfer checks selected the constrained/temporal policy over the
+free-form baseline (28/56 versus 27/56). The complete holdout SigLIP lattice was
+built and evaluated, and the private KITE-6 test artifact was generated and
+independently audited. No new EvalAI submission is authorized by this record.

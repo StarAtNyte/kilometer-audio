@@ -117,7 +117,9 @@ def audit_test(output_prefix: str = "kite5_moss_adjudicated", baseline_prefix: s
     submission = json.loads((root / f"{output_prefix}_submission.json").read_text())
     evidence = json.loads((root / f"{output_prefix}_evidence.json").read_text())
     baseline = json.loads((root / f"{baseline_prefix}_submission.json").read_text())
-    errors = []
+    errors = validate_predictions(questions, submission)
+    errors.extend(f"extra_evidence:{question_id}" for question_id in set(evidence) - set(questions))
+    errors.extend(f"missing_evidence:{question_id}" for question_id in set(questions) - set(evidence))
     invalid_intervals = []
     negative_cards = []
     original_audio = 0
