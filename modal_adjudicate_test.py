@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import modal
@@ -35,7 +34,6 @@ def adjudicate_test(threshold: float = MOSS_THRESHOLD, primary_prefix: str = "ki
     evidence: dict[str, Any] = {}
     switches: list[str] = []
     for question_id, payload in questions.items():
-        k4 = primary[question_id]
         k4e = primary_evidence[question_id]
         video_id = k4e.get("video_id", payload.get("video_id", ""))
         is_fallback = bool(k4e.get("fallback")) or video_id in FALLBACK_VIDEOS

@@ -129,7 +129,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
     def valid_proxy(path: Path) -> bool:
         if not path.exists() or path.stat().st_size == 0:
             return False
-        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)], capture_output=True, text=True)
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)], capture_output=True, text=True, check=False)
         return probe.returncode == 0 and bool(probe.stdout.strip())
 
     pending = [vid for vid in unique_videos if not valid_proxy(proxy_by_video[vid])]
@@ -155,8 +155,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         else:
             ffmpeg_args = [
                 "ffmpeg", "-y", "-threads", "0", "-i", str(source), "-an", "-vf",
-                "fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
-                "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1", "-c:v", "libx264",
+                ("fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
+                 "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1"), "-c:v", "libx264",
                 "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial),
             ]
         conversion = subprocess.run(
@@ -311,7 +311,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             card_path.unlink(missing_ok=True)
             subprocess.run(["ffmpeg", "-y", "-i", evidence["video_path"], "-c", "copy", str(card_path)], check=True, capture_output=True)
         else:
-            probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(card_path)], capture_output=True, text=True)
+            probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(card_path)], capture_output=True, text=True, check=False)
             if probe.returncode or not probe.stdout.strip():
                 print(f"[kite3] invalid card fallback question={question_id}", flush=True)
                 card_path.unlink(missing_ok=True)

@@ -195,7 +195,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
                 image_points.append((start + end) / 2.0)
         for image_index, timestamp in enumerate(image_points):
             image_path = Path("/tmp") / f"kite4-{index}-{image_index}.jpg"
-            image_render = subprocess.run(["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True)
+            image_render = subprocess.run(["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True, check=False)
             if image_render.returncode == 0 and image_path.exists():
                 image_paths.append(image_path)
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
@@ -244,7 +244,6 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
                 max_new_tokens=1,
                 do_sample=False,
             )
-        sequences = generated.sequences if hasattr(generated, "sequences") else generated
         score_rows = getattr(generated, "scores", None)
         if not score_rows:
             raise ValueError(f"Missing constrained scores for {question_id}")
