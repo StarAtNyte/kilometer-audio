@@ -11,22 +11,28 @@ one untouched holdout timeline:
 | Fold/timeline | Queries | TimeLens2 source hit | SigLIP top-5 | TimeLens/SigLIP union |
 |---|---:|---:|---:|---:|
 | dev-000 | 24 | 9/24 (37.5%) | 9/24 (37.5%) | 13/24 (54.2%) |
-| holdout-000 | 24 | 8/24 (33.3%) | pending lattice build | pending lattice build |
+| holdout-000 | 24 | 8/24 (33.3%) | 17/24 (70.8%) | 18/24 (75.0%) |
 
-The dev union rescued four questions beyond SigLIP top-5. The holdout result is
-not used to tune the policy; it is a frozen transfer check.
+The dev union rescued four questions beyond SigLIP top-5. Across the first eight queries of all five holdout timelines, the union reached
+32/40 (80.0%) source recall; the holdout-000 24-query run is reported above as a
+larger check. Holdout results were not used to tune the policy; they are frozen
+transfer checks.
 
 ## Answer-stage check
 
 The existing Qwen3-VL evidence-card verifier was run with both free-form and
 constrained next-token digit selection on dev-000 (24 questions). Both produced
-11/24 (45.83%) with 100% parse coverage. The constrained path is retained as the
-safe implementation because it removes free-form answer parsing, but this small
-run does not establish an accuracy gain.
+11/24 (45.83%) with 100% parse coverage. The constrained path is retained as the safe implementation because it removes
+free-form answer parsing. On holdout-000 it scored 13/24 (54.17%) versus
+10/24 (41.67%) for free-form generation; across the eight-query checks on
+holdout-001..004 it scored 15/32 (46.88%). This is promising but not yet a full
+holdout promotion result.
 
-Temporal questions now receive 2 FPS evidence sampling; other questions remain at
-1 FPS. This is an authorized experiment only and is not yet promoted to the
-KilometerAudio test pipeline.
+Temporal questions now receive 2 FPS evidence sampling and midpoint stills;
+other questions remain at 1 FPS. The production KITE-4 path now has the same
+bounded temporal policy and uses constrained next-token digit scoring for the
+five options, retaining per-option logits in evidence. This source change is
+not yet run on KilometerAudio test.
 
 ## Next gate
 

@@ -493,7 +493,9 @@ def verify_cards(
         raise ValueError("Only authorized train-derived dev or holdout is allowed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
-    cards_path = ROOT / "evaluations" / fold / "cards" / f"{timeline_id}-24.jsonl"
+    cards_path = ROOT / "evaluations" / fold / "cards" / f"{timeline_id}-{card_limit}.jsonl"
+    if not cards_path.exists():
+        cards_path = ROOT / "evaluations" / fold / "cards" / f"{timeline_id}-24.jsonl"
     cards = [json.loads(line) for line in cards_path.read_text().splitlines()][:card_limit]
     model = AutoModelForImageTextToText.from_pretrained(
         VERIFIER_MODEL,

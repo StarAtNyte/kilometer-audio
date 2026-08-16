@@ -49,11 +49,28 @@ def parse_letter(text: str) -> int | None:
     return ord(match.group(1).upper()) - ord("A") if match else None
 
 
+def select_constrained_digit(logits: Any, tokenizer: Any) -> tuple[int, list[float]]:
+    token_ids = []
+    for value in range(5):
+        encoded = tokenizer.encode(str(value), add_special_tokens=False)
+        if len(encoded) != 1:
+            raise ValueError(f"Digit {value} is not a single token: {encoded}")
+        token_ids.append(encoded[0])
+    scores = [float(logits[token_id].float().item()) for token_id in token_ids]
+    return max(range(5), key=scores.__getitem__), scores
+
+
 def source_duration(source: Path) -> float:
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(source)], text=True).strip())
 
 
-def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> None:
+def needs_temporal_resolution(question: str) -> bool:
+    text = question.lower()
+    markers = ("how many", "how often", "how long", "first", "last", "before", "after", "between", "order", "sequence", "times")
+    return any(marker in text for marker in markers)
+
+
+def render_av_card(source: Path, intervals: list[list[float]], output: Path, video_fps: int = 1) -> None:
     partial = output.with_name(output.stem + ".partial.mp4")
     ffmpeg_inputs = [
         item
@@ -63,7 +80,7 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path) -> 
     filters = []
     for index in range(len(intervals)):
         filters.append(
-            f"[{index}:v]setpts=PTS-STARTPTS,fps=1,scale=640:360:"
+            f"[{index}:v]setpts=PTS-STARTPTS,fps={video_fps},scale=640:360:"
             "force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,"
             f"setsar=1[v{index}]"
         )
@@ -166,11 +183,17 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         duration = source_duration(source)
         intervals = [[max(0.0, min(duration, float(start))), max(0.0, min(duration, float(end)))] for start, end in row["intervals"] if float(end) > float(start)]
         intervals = [[start, end] for start, end in intervals if end > start]
-        render_av_card(source, intervals, card)
+        evidence_fps = 2 if needs_temporal_resolution(payload["question"]) else 1
+        render_av_card(source, intervals, card, evidence_fps)
         image_paths = []
-        for image_index, (start, end) in enumerate(intervals[:5]):
+        image_points = []
+        for start, end in intervals[:5]:
+            image_points.append(start)
+            if evidence_fps > 1:
+                image_points.append((start + end) / 2.0)
+        for image_index, timestamp in enumerate(image_points):
             image_path = Path("/tmp") / f"kite4-{index}-{image_index}.jpg"
-            image_render = subprocess.run(["ffmpeg", "-y", "-ss", str(start), "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True)
+            image_render = subprocess.run(["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True)
             if image_render.returncode == 0 and image_path.exists():
                 image_paths.append(image_path)
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
@@ -183,7 +206,7 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             f"Question: {payload['question']}\nOptions:\n{options}\n"
             "Use both the sound and images in the evidence video. Carefully verify exact counts, "
             "times, and route/order relationships against the evidence; do not guess from plausibility. "
-            "Return only the chosen letter inside answer tags."
+            "Return exactly one digit from 0 to 4 for the selected option."
         )
         conversation = [
             {
@@ -210,33 +233,17 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         )
         inputs = inputs.to(model.device).to(model.dtype)
         with torch.inference_mode():
-            generated = model.generate(
-                **inputs,
-                return_audio=False,
-                thinker_return_dict_in_generate=True,
-                use_audio_in_video=True,
-                max_new_tokens=96,
-                do_sample=False,
-            )
-        text_ids = generated[0] if isinstance(generated, tuple) else generated
-        if isinstance(text_ids, str):
-            response = text_ids
-        elif isinstance(text_ids, list) and text_ids and isinstance(text_ids[0], str):
-            response = text_ids[0]
-        else:
-            sequences = text_ids.sequences if hasattr(text_ids, "sequences") else text_ids
-            response = processor.batch_decode(
-                sequences[:, inputs["input_ids"].shape[1] :],
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-            )[0]
-        answer_id = parse_letter(response)
-        if answer_id is None:
-            raise ValueError(f"Could not parse {question_id}: {response}")
+            output = model(**inputs, use_audio_in_video=True)
+        answer_id, digit_scores = select_constrained_digit(
+            output.logits[0, -1], processor.tokenizer
+        )
+        response = str(answer_id)
         selected[question_id] = answer_id
         records[question_id] = {
             "answer_id": answer_id,
             "response": response,
+            "digit_scores": digit_scores,
+            "evidence_fps": evidence_fps,
             "intervals": intervals,
             "card_seconds": sum(end - start for start, end in intervals),
             "fallback": False,
