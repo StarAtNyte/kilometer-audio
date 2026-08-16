@@ -183,6 +183,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         duration = source_duration(source)
         intervals = [[max(0.0, min(duration, float(start))), max(0.0, min(duration, float(end)))] for start, end in row["intervals"] if float(end) > float(start)]
         intervals = [[start, end] for start, end in intervals if end > start]
+        if not intervals:
+            intervals = [[0.0, min(duration, 10.0)]]
         evidence_fps = 2 if needs_temporal_resolution(payload["question"]) else 1
         render_av_card(source, intervals, card, evidence_fps)
         image_paths = []
