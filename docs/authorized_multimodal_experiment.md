@@ -31,12 +31,15 @@ holdout promotion result.
 Temporal questions now receive 2 FPS evidence sampling and midpoint stills;
 other questions remain at 1 FPS. The production KITE-4 path now has the same
 bounded temporal policy and uses constrained next-token digit scoring for the
-five options, retaining per-option logits in evidence. This source change is
-not yet run on KilometerAudio test.
+five options, retaining per-option logits in evidence. This source change was used for the private KITE-6 test artifact; that artifact
+remains unsubmitted.
 
 ## Promotion decision
 
-The holdout transfer checks selected the constrained/temporal policy over the
-free-form baseline (28/56 versus 27/56). The complete holdout SigLIP lattice was
-built and evaluated, and the private KITE-6 test artifact was generated and
-independently audited. No new EvalAI submission is authorized by this record.
+The paired holdout transfer checks selected the constrained/temporal policy over
+its frozen free-form Qwen3-VL baseline (28/56 versus 27/56). The complete holdout
+SigLIP lattice was built and evaluated, and the private KITE-6 test artifact was
+generated and independently audited. This paired baseline is explicitly
+separate from the previously frozen MOSS-only 358/708 holdout diagnostic; no
+claim is made that KITE-6 beats that different candidate. No new EvalAI
+submission is authorized by this record.

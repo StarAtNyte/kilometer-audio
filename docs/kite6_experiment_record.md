@@ -6,7 +6,9 @@
 - Authorized selection: Perception Test train-derived dev/holdout only. No
   KilometerAudio validation/test answers were used.
 - Holdout evidence: the frozen five-timeline smoke sample (56 questions) scored
-  28/56 (50.0%) with constrained scoring versus 27/56 (48.21%) free-form scoring.
+  28/56 (50.0%) with constrained scoring versus 27/56 (48.21%) free-form scoring;
+  this is the paired baseline used for this policy decision. It is separate from
+  the MOSS-only 358/708 holdout diagnostic, which was not claimed as beaten.
   Retrieval union source recall was 32/40 (80.0%) on the eight-query-per-timeline
   transfer sample. Full holdout CLAP retrieval evaluation covered 708 MCQs.
 - Modal generation: `ap-yeu4F9wAKczVv37TdmVgZJ`.
