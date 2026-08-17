@@ -23,6 +23,20 @@ runs had complete constrained parse coverage. The candidate is above the 0.400
 internal gate on this authorized transfer evaluation, but it is not yet an
 official KilometerAudio score.
 
+## CLAP-only ablation
+
+A paired ablation using identical five holdout timelines and eight queries per
+timeline replaced RRF with CLAP-only top-3 sources:
+
+| Policy | holdout correct | Result |
+|---|---:|---|
+| RRF CLAP + SigLIP | 21/40 (52.5%) | retained |
+| CLAP-only | 19/40 (47.5%) | rejected |
+
+Per-timeline CLAP-only counts were 4/8, 5/8, 2/8, 4/8, and 4/8. The ablation
+was fully parseable but failed the >=22/40 promotion gate, so it will not be
+transferred to test generation.
+
 ## Promotion status
 
 This is the first campaign candidate to consider for a private test artifact.

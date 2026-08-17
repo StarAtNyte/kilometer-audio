@@ -352,10 +352,16 @@ def merge_intervals(intervals: list[list[float]], gap: float = 2.0) -> list[list
 
 @app.function(image=cpu_image, volumes={"/data": volume}, timeout=30 * 60)
 def build_evidence_cards(
-    fold: str = "dev", timeline_index: int = 0, limit: int = 24, fusion: bool = False
+    fold: str = "dev",
+    timeline_index: int = 0,
+    limit: int = 24,
+    fusion: bool = False,
+    fusion_policy: str = "rrf",
 ) -> dict[str, Any]:
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized train-derived dev or holdout is allowed")
+    if fusion and fusion_policy not in {"rrf", "clap"}:
+        raise ValueError("fusion_policy must be rrf or clap")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     evaluation = ROOT / "evaluations" / fold
@@ -406,19 +412,25 @@ def build_evidence_cards(
             sources.append({"kind": "timelens2", "interval": expanded})
         visual_ids = visual[row["query_id"]]["strategies"]["option_max"]["top_video_ids"]
         if fusion:
-            rrf: dict[str, float] = {}
-            rankings = [visual_ids, audio[row["query_id"]]["strategies"]["option_max"]["top_video_ids"]]
-            for ranking in rankings:
-                for rank, source_id in enumerate(ranking, start=1):
-                    rrf[source_id] = rrf.get(source_id, 0.0) + 1.0 / (60 + rank)
-            visual_ids = sorted(rrf, key=rrf.get, reverse=True)[:3]
+            audio_ids = audio[row["query_id"]]["strategies"]["option_max"]["top_video_ids"]
+            if fusion_policy == "clap":
+                visual_ids = audio_ids[:3]
+            else:
+                rrf: dict[str, float] = {}
+                for ranking in (visual_ids, audio_ids):
+                    for rank, source_id in enumerate(ranking, start=1):
+                        rrf[source_id] = rrf.get(source_id, 0.0) + 1.0 / (60 + rank)
+                visual_ids = sorted(rrf, key=rrf.get, reverse=True)[:3]
         else:
             visual_ids = visual_ids[:5]
         for video_id in visual_ids:
             segment = segment_by_video[video_id]
             interval = [segment["start"], segment["end"]]
             proposed.append(interval)
-            sources.append({"kind": "rrf_source" if fusion else "siglip2_source", "video_id": video_id, "interval": interval})
+            source_kind = (
+                f"{fusion_policy}_source" if fusion else "siglip2_source"
+            )
+            sources.append({"kind": source_kind, "video_id": video_id, "interval": interval})
         intervals = merge_intervals(proposed)
         duration = sum(end - start for start, end in intervals)
         relevant = row["relevant_span"]
@@ -441,7 +453,9 @@ def build_evidence_cards(
             }
         )
     output = evaluation / "cards"
-    card_tag = f"fused-{limit}" if fusion else str(limit)
+    card_tag = (
+        f"fused-{limit}" if fusion_policy == "rrf" else f"fused-{fusion_policy}-{limit}"
+    ) if fusion else str(limit)
     jsonl_write(output / f"{timeline_id}-{card_tag}.jsonl", cards)
     summary = {
         "fold": fold,
@@ -451,7 +465,11 @@ def build_evidence_cards(
         "mean_evidence_seconds": total_seconds / len(cards),
         "mean_timeline_seconds": materialized["duration"],
         "compression_ratio": total_seconds / len(cards) / materialized["duration"],
-        "policy": "up to 3 TimeLens2 intervals plus RRF top-3 CLAP/SigLIP sources, merged" if fusion else "up to 3 TimeLens2 intervals (+/-4s) plus SigLIP2 top-5 sources, merged",
+        "policy": (
+            f"up to 3 TimeLens2 intervals plus {fusion_policy} top-3 sources, merged"
+            if fusion
+            else "up to 3 TimeLens2 intervals (+/-4s) plus SigLIP2 top-5 sources, merged"
+        ),
         "kilometer_validation_used": False,
     }
     atomic_write_json(output / f"{timeline_id}-{card_tag}.json", summary)
@@ -505,6 +523,7 @@ def verify_cards(
     constrained: bool = False,
     neutral_prompt: bool = False,
     fusion: bool = False,
+    fusion_policy: str = "rrf",
 ) -> dict[str, Any]:
     import torch
     from qwen_vl_utils import process_vision_info
@@ -512,9 +531,15 @@ def verify_cards(
 
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized train-derived dev or holdout is allowed")
+    if fusion and fusion_policy not in {"rrf", "clap"}:
+        raise ValueError("fusion_policy must be rrf or clap")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
-    card_tag = f"fused-{card_limit}" if fusion else str(card_limit)
+    card_tag = (
+        f"fused-{card_limit}"
+        if fusion_policy == "rrf"
+        else f"fused-{fusion_policy}-{card_limit}"
+    ) if fusion else str(card_limit)
     cards_path = ROOT / "evaluations" / fold / "cards" / f"{timeline_id}-{card_tag}.jsonl"
     if not cards_path.exists() and not fusion:
         cards_path = ROOT / "evaluations" / fold / "cards" / f"{timeline_id}-24.jsonl"
@@ -685,9 +710,13 @@ def main(
     elif action == "verify-constrained":
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True), indent=2))
     elif action == "cards-fused":
-        print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True), indent=2))
+        print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True, "rrf"), indent=2))
     elif action == "verify-fused":
-        print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True), indent=2))
+        print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True, "rrf"), indent=2))
+    elif action == "cards-fused-clap":
+        print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True, "clap"), indent=2))
+    elif action == "verify-fused-clap":
+        print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True, "clap"), indent=2))
     elif action == "verify-neutral":
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, False, True), indent=2))
     elif action == "verify-full":
