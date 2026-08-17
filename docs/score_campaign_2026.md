@@ -25,6 +25,7 @@ KilometerAudio labels may be used for tuning.
 | 578996 | 2026-08-13 05:45 | private | finished | **0.366** | current best verified score |
 | 579002 | 2026-08-13 06:50 | private | finished | 0.336 | preserved fallback |
 | 579160 | 2026-08-14 18:52 | private | finished | 0.338 | KITE-5; explicitly preserved |
+| 579327 | 2026-08-17 05:54 | private | submitted | pending | KITE-6 controlled experiment; score pending |
 
 The phase API currently lists 5 submissions, leaving approximately 25 of the
 30 total allowance, with a maximum of 2 per day. Private runs are diagnostic
