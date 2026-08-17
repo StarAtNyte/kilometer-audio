@@ -59,6 +59,45 @@ FAMILY_PATTERNS: dict[str, tuple[str, ...]] = {
     "negation": ("false", "not true", "did not", "never", "none"),
 }
 
+ROUTE_MARKERS: dict[str, tuple[str, ...]] = {
+    "cross_modal": ("seen and heard", "both seen", "both visible and audible", "can be both seen and heard"),
+    "temporal": ("how many", "number of", "how often", "first", "last", "before", "after", "following", "in the first", "within the first"),
+    "audio": ("heard", "sound", "audible", "noise", "ringing", "gushing", "singing", "music", "voice"),
+    "visual": ("seen", "visible", "shown", "look", "appears", "sign", "building", "street", "sculpture", "fountain"),
+}
+
+
+def route_question(question: str) -> dict[str, object]:
+    """Select evidence emphasis without using evaluation answers or labels."""
+    text = question.lower()
+    matched = {
+        name: any(contains_phrase(text, marker) for marker in markers)
+        for name, markers in ROUTE_MARKERS.items()
+    }
+    if matched["cross_modal"]:
+        route = "cross_modal"
+        audio_weight, visual_weight, fps = 0.5, 0.5, 2
+    elif matched["temporal"]:
+        route = "temporal"
+        audio_weight, visual_weight, fps = 0.5, 0.5, 2
+    elif matched["audio"] and not matched["visual"]:
+        route = "audio"
+        audio_weight, visual_weight, fps = 0.75, 0.25, 1
+    elif matched["visual"] and not matched["audio"]:
+        route = "visual"
+        audio_weight, visual_weight, fps = 0.25, 0.75, 1
+    else:
+        route = "balanced"
+        audio_weight, visual_weight, fps = 0.5, 0.5, 1
+    return {
+        "route": route,
+        "audio_weight": audio_weight,
+        "visual_weight": visual_weight,
+        "evidence_fps": fps,
+        "matched_families": [name for name, value in matched.items() if value],
+    }
+
+
 STOP_TERMS = {
     "about",
     "after",

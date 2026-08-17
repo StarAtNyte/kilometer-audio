@@ -4,6 +4,7 @@ from kite_core import (
     canonical_answer_id,
     compile_question,
     option_permutations,
+    route_question,
     validate_predictions,
     validate_questions,
 )
@@ -49,6 +50,24 @@ def test_global_marker_does_not_match_inside_mall() -> None:
 def test_time_marker_does_not_match_inside_ambulance() -> None:
     plan = compile_question("q1", question("When can an ambulance be heard?"))
     assert "time_of_day" not in plan.families
+
+
+def test_question_router_prioritizes_cross_modal() -> None:
+    route = route_question("How many fountains can be both seen and heard?")
+    assert route["route"] == "cross_modal"
+    assert route["evidence_fps"] == 2
+
+
+def test_question_router_audio_only() -> None:
+    route = route_question("What sound is heard near the bridge?")
+    assert route["route"] == "audio"
+    assert route["audio_weight"] > route["visual_weight"]
+
+
+def test_question_router_visual_only() -> None:
+    route = route_question("What building is visible on the street?")
+    assert route["route"] == "visual"
+    assert route["visual_weight"] > route["audio_weight"]
 
 
 def test_prediction_validation() -> None:
