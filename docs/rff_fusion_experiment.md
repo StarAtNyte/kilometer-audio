@@ -42,6 +42,8 @@ transferred to test generation.
 The production candidate passed a pre-submission audit: 500/500 question IDs,
 500/500 evidence records, valid answer IDs, valid non-negative intervals, and
 video/provenance consistency. It contains 488 RRF records and 12 preserved
-fallback records. The private artifact was submitted as EvalAI run `579337` on
-2026-08-17; its score is pending. Existing official best run `578996` at Top-1
+fallback records. An initial upload to the wrong phase (`5351`) failed as run `579337` because
+its question keys were not in that split. The same unchanged audited artifact
+was submitted to the correct test phase (`5352`) as private EvalAI run `579338`
+on 2026-08-17; its score is pending. Existing official best run `578996` at Top-1
 `0.366`, KITE-5 run `579160`, and fallback `579002` remain unchanged.
