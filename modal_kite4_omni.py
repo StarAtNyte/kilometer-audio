@@ -130,15 +130,24 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
     memory=131072,
     timeout=8 * 60 * 60,
 )
-def generate_validation(split: str = "validation") -> dict[str, Any]:
+def generate_validation(
+    split: str = "validation", policy: str = "baseline"
+) -> dict[str, Any]:
     import torch
     from qwen_omni_utils import process_mm_info
-    from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
+    from transformers import (
+        ClapModel,
+        ClapProcessor,
+        Qwen3OmniMoeForConditionalGeneration,
+        Qwen3OmniMoeProcessor,
+    )
 
     volume.reload()
     print(f"[kite4] start split={split}", flush=True)
     if split not in {"validation", "test"}:
         raise ValueError(f"Unsupported split: {split}")
+    if policy not in {"baseline", "rrf"}:
+        raise ValueError(f"Unsupported policy: {policy}")
     questions = json.loads((TRACK_ROOT / "manifests" / f"{split}_questions.json").read_text())
     evidence = json.loads(
         (TRACK_ROOT / "predictions" / split / "kite3_evidence.json").read_text()
@@ -155,8 +164,17 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
     ).eval()
     model.disable_talker()
     processor = Qwen3OmniMoeProcessor.from_pretrained(MODEL_NAME, cache_dir=cache)
+    clap_processor = clap_model = None
+    if policy == "rrf":
+        clap_processor = ClapProcessor.from_pretrained(
+            "laion/clap-htsat-fused", cache_dir=cache
+        )
+        clap_model = ClapModel.from_pretrained(
+            "laion/clap-htsat-fused", cache_dir=cache
+        ).to("cuda").eval()
     output = TRACK_ROOT / "predictions" / split
-    partial_path = output / "kite6_omni_partial.json"
+    prefix = "kite7_rrf" if policy == "rrf" else "kite6_omni"
+    partial_path = output / f"{prefix}_partial.json"
     records: dict[str, Any] = (
         json.loads(partial_path.read_text()) if partial_path.exists() else {}
     )
@@ -181,8 +199,51 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             continue
         card = Path("/tmp") / f"kite4-{index}.mp4"
         duration = source_duration(source)
-        intervals = [[max(0.0, min(duration, float(start))), max(0.0, min(duration, float(end)))] for start, end in row["intervals"] if float(end) > float(start)]
-        intervals = [[start, end] for start, end in intervals if end > start]
+        centers: list[float] = []
+        if policy == "rrf":
+            visual_centers = [
+                float(value)
+                for value in row.get("visual_times", [])
+                if 0.0 <= float(value) <= duration
+            ]
+            embeddings = torch.from_numpy(
+                __import__("numpy").load(
+                    TRACK_ROOT / "embeddings" / f"{row['video_id']}.clap.npy"
+                ).astype("float32")
+            ).to("cuda")
+            audio_rows = [
+                json.loads(line)
+                for line in (
+                    TRACK_ROOT / "embeddings" / f"{row['video_id']}.clap.jsonl"
+                ).read_text().splitlines()
+            ]
+            inputs = clap_processor(text=[payload["question"]], return_tensors="pt", padding=True)
+            inputs = {key: value.to("cuda") for key, value in inputs.items()}
+            with torch.inference_mode():
+                feature_output = clap_model.get_text_features(**inputs)
+                feature = getattr(feature_output, "pooler_output", feature_output)
+                feature = torch.nn.functional.normalize(feature, dim=-1)[0]
+            scores = embeddings @ feature
+            audio_centers: list[float] = []
+            for raw_index in torch.argsort(scores, descending=True).tolist():
+                timestamp = float(audio_rows[raw_index]["start"])
+                if timestamp <= duration and all(abs(timestamp - prior) >= 45 for prior in audio_centers):
+                    audio_centers.append(timestamp)
+                if len(audio_centers) == 5:
+                    break
+            for visual, audio in zip(visual_centers, audio_centers):
+                centers.extend((visual, audio))
+            centers.extend(visual_centers[len(audio_centers) :])
+            centers.extend(audio_centers[len(visual_centers) :])
+            deduped: list[float] = []
+            for center in centers:
+                if all(abs(center - prior) >= 25 for prior in deduped):
+                    deduped.append(center)
+            centers = deduped[:5]
+            intervals = [[max(0.0, center - 12.0), min(duration, center + 12.0)] for center in centers]
+        else:
+            intervals = [[max(0.0, min(duration, float(start))), max(0.0, min(duration, float(end)))] for start, end in row["intervals"] if float(end) > float(start)]
+            intervals = [[start, end] for start, end in intervals if end > start]
         if not intervals:
             intervals = [[0.0, min(duration, 10.0)]]
         evidence_fps = 2 if needs_temporal_resolution(payload["question"]) else 1
@@ -257,6 +318,8 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             "response": response,
             "digit_scores": digit_scores,
             "evidence_fps": evidence_fps,
+            "policy": policy,
+            "centers": centers,
             "intervals": intervals,
             "card_seconds": sum(end - start for start, end in intervals),
             "fallback": False,
@@ -276,16 +339,17 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
             print(f"[kite4] answered {done}/{len(questions)} elapsed={elapsed/60:.1f}m rate={rate:.2f}/s", flush=True)
     print("[kite4] writing artifacts", flush=True)
     submission = build_submission(questions, selected)
-    atomic_write_json(output / "kite6_omni_submission.json", submission)
-    atomic_write_json(output / "kite6_omni_evidence.json", records)
+    atomic_write_json(output / f"{prefix}_submission.json", submission)
+    atomic_write_json(output / f"{prefix}_evidence.json", records)
     volume.commit()
     return {
         "questions": len(submission),
         "model": MODEL_NAME,
-        "submission_path": str(output / "kite6_omni_submission.json"),
+        "submission_path": str(output / f"{prefix}_submission.json"),
+        "policy": policy,
     }
 
 
 @app.local_entrypoint()
-def main(split: str = "validation") -> None:
-    print(json.dumps(generate_validation.remote(split), indent=2))
+def main(split: str = "validation", policy: str = "baseline") -> None:
+    print(json.dumps(generate_validation.remote(split, policy), indent=2))
