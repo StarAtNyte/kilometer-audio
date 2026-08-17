@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import tempfile
+import types
 from pathlib import Path
 from typing import Any
 
@@ -62,9 +63,20 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8) -> dic
         model_id, device_map="auto", torch_dtype=torch.bfloat16,
         load_audio_in_video=True,
     ).eval()
-    # The released fork's rotary video-time path currently has a shape bug
-    # for these clips; first establish a no-time-embedding baseline.
-    model._video_embed_time = False
+    # Normalize the fork's batched video-time metadata before its rotary path.
+    # The processor may return [1, frames] while AVF expects [frames].
+    original_tsp = model._tsp_process
+    def normalized_tsp(self, inputs, start_token_embeds, end_token_embeds,
+                       sep_token_embeds, times=None, time_embed=None):
+        if times is not None:
+            times = times.reshape(-1)
+            if times.numel() != inputs.shape[0]:
+                times = torch.linspace(
+                    0, float(inputs.shape[0] - 1), inputs.shape[0], device=times.device,
+                )
+        return original_tsp(inputs, start_token_embeds, end_token_embeds,
+                            sep_token_embeds, times=times, time_embed=time_embed)
+    model._tsp_process = types.MethodType(normalized_tsp, model)
     processor = AutoProcessor.from_pretrained(
         model_id, padding_side="left", use_fast=False,
         load_audio_in_video=True, num_video_frames=128,

@@ -16,10 +16,11 @@ one interval, so it is currently an integration/runtime incompatibility rather
 than a model-quality result. No KilometerAudio test labels were used for model
 selection and no test artifact or EvalAI submission was produced.
 
-A no-time-embedding workaround (`model._video_embed_time = False`) bypassed the
-shape failure and produced a valid one-timeline probe: holdout-000 scored 2/8
-(25.0%) with 100% parsing. This is below the existing Qwen/RRF verifier and is
-rejected. The workaround also removes the model's temporal rotary signal, so it
-is not a fair final AVF evaluation. The candidate must not be promoted without
-fixing the released processor/media-shape contract and demonstrating a complete
-dev/holdout improvement.
+A runtime compatibility patch now normalizes the processor's batched video-time
+metadata and synthesizes frame-aligned relative times when the released fork
+returns an incompatible shape. This preserves AVF's temporal rotary path and
+produced a valid one-timeline probe: holdout-000 scored 2/8 (25.0%) with 100%
+parsing. This is below the existing Qwen/RRF verifier and the candidate is
+rejected for promotion. The complete dev/holdout evaluation is not warranted
+unless a stronger retrieval/card policy changes this result; no test artifact
+or EvalAI submission was produced.
