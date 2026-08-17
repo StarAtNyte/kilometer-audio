@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -86,19 +87,23 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                 "Return exactly one digit 0, 1, 2, 3, or 4 and nothing else.\n"
                 f"Question: {card['question']}\nOptions:\n{options}"
             )
-            for attempt in range(len(keys)):
-                key = keys[(key_index + attempt) % len(keys)]
-                response = requests.post(
-                    endpoint, params={"key": key},
-                    json={"contents": [{"parts": [
-                        {"inline_data": {"mime_type": "video/mp4", "data": encoded}},
-                        {"text": prompt},
-                    ]}], "generationConfig": {"temperature": 0}},
-                    timeout=300,
-                )
-                if response.status_code != 429:
-                    key_index = (key_index + attempt) % len(keys)
+            for retry in range(5):
+                for attempt in range(len(keys)):
+                    key = keys[(key_index + attempt) % len(keys)]
+                    response = requests.post(
+                        endpoint, params={"key": key},
+                        json={"contents": [{"parts": [
+                            {"inline_data": {"mime_type": "video/mp4", "data": encoded}},
+                            {"text": prompt},
+                        ]}], "generationConfig": {"temperature": 0}},
+                        timeout=300,
+                    )
+                    if response.status_code not in {429, 500, 502, 503, 504}:
+                        key_index = (key_index + attempt) % len(keys)
+                        break
+                if response.status_code not in {429, 500, 502, 503, 504}:
                     break
+                time.sleep(2 ** retry)
             response.raise_for_status()
             payload = response.json()
             text = "".join(

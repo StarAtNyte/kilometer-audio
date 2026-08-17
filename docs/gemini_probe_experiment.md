@@ -9,17 +9,20 @@ video cards plus the question/options to Gemini through the Modal secret
 `/data/allowed-training/perception-test/kite3/evaluations/{fold}/gemini/` tree.
 No KilometerAudio validation/test answers are used.
 
-## Initial result
+## Results
 
-- Fold: holdout-000
-- Queries: 8
-- Parsed responses: 7/8
-- Correct: 2/8 parsed-comparable rows (`0.25` over all eight queries)
-- Model: `gemini-2.5-flash`
-- Evidence: existing RRF fused cards
+The first `gemini-2.5-flash` probe on holdout-000 scored 2/8 (25%) with 7/8
+parseable responses; it frequently returned explanations instead of a digit.
 
-This is an exploratory result, not a promotion result. The model frequently
-returned explanations despite the one-digit instruction, and one response did
-not parse. A full comparison is blocked by the Gemini API returning HTTP 429
-rate-limit responses on subsequent calls. No EvalAI submission was made from
-this experiment.
+A newer `gemini-3.6-flash` probe on the same RRF cards was substantially better:
+
+| Timeline | Parsed | Correct | Accuracy |
+|---|---:|---:|---:|
+| holdout-000 | 8/8 | 7/8 | 87.5% |
+| holdout-001 | 8/8 | 6/8 | 75.0% |
+| **partial total** | **16/16** | **13/16** | **81.25%** |
+
+The remaining timelines were interrupted by Gemini HTTP 429 quota responses,
+so this is not yet a promotion result. The evaluator now retries transient
+429/5xx responses and rotates configured private keys. No EvalAI submission was
+made from this experiment.
