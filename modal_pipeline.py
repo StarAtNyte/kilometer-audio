@@ -887,7 +887,7 @@ def main(
     elif action == "download-split":
         jobs = split_video_jobs.remote(split)
         # YouTube rate-limits bursts. Keep the producer deliberately small and resumable.
-        for offset in range(0, len(jobs)):
+        for offset in range(len(jobs)):
             batch = jobs[offset : offset + 1]
             video_ids = [job["video_id"] for job in batch]
             urls = [job["url"] for job in batch]
@@ -942,7 +942,7 @@ def main(
                 build_audio_index.remote(current_id)
                 progress["completed"] += 1
                 report(current_id, "index", "complete")
-            except Exception as error:
+            except Exception as error:  # noqa: BLE001 - keep long batch resumable
                 progress["skipped"] += 1
                 report(current_id, "error", str(error))
         report(None, "submission", "running")
