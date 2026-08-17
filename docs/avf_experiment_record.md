@@ -19,8 +19,8 @@ selection and no test artifact or EvalAI submission was produced.
 A runtime compatibility patch now normalizes the processor's batched video-time
 metadata and synthesizes frame-aligned relative times when the released fork
 returns an incompatible shape. This preserves AVF's temporal rotary path and
-produced a valid one-timeline probe: holdout-000 scored 2/8 (25.0%) with 100%
-parsing. This is below the existing Qwen/RRF verifier and the candidate is
-rejected for promotion. The complete dev/holdout evaluation is not warranted
+produced valid probes on two timelines: holdout-000 scored 2/8 (25.0%) and
+holdout-001 scored 1/8 (12.5%), both with 100% parsing. These are below the
+existing Qwen/RRF verifier and the candidate is rejected for promotion. The complete dev/holdout evaluation is not warranted
 unless a stronger retrieval/card policy changes this result; no test artifact
 or EvalAI submission was produced.
