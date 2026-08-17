@@ -27,7 +27,7 @@ KilometerAudio labels may be used for tuning.
 | 579160 | 2026-08-14 18:52 | private | finished | 0.338 | KITE-5; explicitly preserved |
 | 579327 | 2026-08-17 05:54 | private | finished | 0.268 | KITE-6 controlled experiment; below current best |
 | 579337 | 2026-08-17 | private | failed | — | KITE-7 RRF sent to phase 5351 (wrong split; EvalAI rejected question keys) |
-| 579338 | 2026-08-17 | private | submitted | pending | KITE-7 RRF; 500/500 audited artifact, phase 5352 |
+| 579338 | 2026-08-17 | private | finished | 0.242 | KITE-7 RRF; 500/500 audited artifact, phase 5352 |
 
 The phase API previously listed 6 submissions, leaving 24 of the 30 total
 allowance. Run 579337 is the seventh campaign submission; the maximum of two
