@@ -62,6 +62,9 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8) -> dic
         model_id, device_map="auto", torch_dtype=torch.bfloat16,
         load_audio_in_video=True,
     ).eval()
+    # The released fork's rotary video-time path currently has a shape bug
+    # for these clips; first establish a no-time-embedding baseline.
+    model._video_embed_time = False
     processor = AutoProcessor.from_pretrained(
         model_id, padding_side="left", use_fast=False,
         load_audio_in_video=True, num_video_frames=128,
