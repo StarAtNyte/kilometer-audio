@@ -39,7 +39,9 @@ transferred to test generation.
 
 ## Promotion status
 
-This is the first campaign candidate to consider for a private test artifact.
-It must still pass full test artifact validation and receive explicit submission
-approval. Existing official best run `578996` at Top-1 `0.366`, KITE-5 run
-`579160`, and fallback `579002` remain unchanged.
+The production candidate passed a pre-submission audit: 500/500 question IDs,
+500/500 evidence records, valid answer IDs, valid non-negative intervals, and
+video/provenance consistency. It contains 488 RRF records and 12 preserved
+fallback records. The private artifact was submitted as EvalAI run `579337` on
+2026-08-17; its score is pending. Existing official best run `578996` at Top-1
+`0.366`, KITE-5 run `579160`, and fallback `579002` remain unchanged.
