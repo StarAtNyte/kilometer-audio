@@ -115,7 +115,7 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
         check=False,
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=60,
     )
     if result.returncode or not partial.exists() or partial.stat().st_size == 0:
         partial.unlink(missing_ok=True)
@@ -155,6 +155,9 @@ def generate_validation(
     fallback = json.loads(
         (TRACK_ROOT / "predictions" / split / "audio_rag_submission.json").read_text()
     )
+    baseline_submission = json.loads(
+        (TRACK_ROOT / "predictions" / split / "kite4_omni_submission.json").read_text()
+    ) if policy == "rrf" else {}
     cache = TRACK_ROOT / "models" / "huggingface"
     model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
         MODEL_NAME,
@@ -250,7 +253,26 @@ def generate_validation(
         if not intervals:
             intervals = [[0.0, min(duration, 10.0)]]
         evidence_fps = 2 if needs_temporal_resolution(payload["question"]) else 1
-        render_av_card(source, intervals, card, evidence_fps)
+        try:
+            render_av_card(source, intervals, card, evidence_fps)
+        except Exception as error:
+            if policy != "rrf" or question_id not in baseline_submission:
+                raise
+            answer_id = int(baseline_submission[question_id]["answer_id"])
+            selected[question_id] = answer_id
+            records[question_id] = {
+                "answer_id": answer_id,
+                "policy": policy,
+                "fallback": True,
+                "fallback_reason": "rrf_render_failed",
+                "error": str(error)[-500:],
+                "video_id": row["video_id"],
+                "intervals": intervals,
+            }
+            atomic_write_json(partial_path, records)
+            volume.commit()
+            print(f"[kite4] RRF fallback {len(selected)}/{len(questions)} id={question_id}", flush=True)
+            continue
         image_paths = []
         image_points = []
         for start, end in intervals[:5]:
