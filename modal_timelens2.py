@@ -10,7 +10,7 @@ from typing import Any
 
 import modal
 
-from kite_core import atomic_write_json, jsonl_write
+from kite_core import atomic_write_json, jsonl_write, route_question
 
 VOLUME_NAME = "perception-test-2026-data"
 ROOT = Path("/data/allowed-training/perception-test/kite3")
@@ -360,8 +360,8 @@ def build_evidence_cards(
 ) -> dict[str, Any]:
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized train-derived dev or holdout is allowed")
-    if fusion and fusion_policy not in {"rrf", "clap"}:
-        raise ValueError("fusion_policy must be rrf or clap")
+    if fusion and fusion_policy not in {"rrf", "clap", "routed"}:
+        raise ValueError("fusion_policy must be rrf, clap, or routed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     evaluation = ROOT / "evaluations" / fold
@@ -415,6 +415,18 @@ def build_evidence_cards(
             audio_ids = audio[row["query_id"]]["strategies"]["option_max"]["top_video_ids"]
             if fusion_policy == "clap":
                 visual_ids = audio_ids[:3]
+            elif fusion_policy == "routed":
+                route = route_question(queries[row["query_id"]]["query"])["route"]
+                if route == "audio":
+                    visual_ids = audio_ids[:3]
+                elif route == "visual":
+                    visual_ids = visual_ids[:3]
+                else:
+                    rrf: dict[str, float] = {}
+                    for ranking in (visual_ids, audio_ids):
+                        for rank, source_id in enumerate(ranking, start=1):
+                            rrf[source_id] = rrf.get(source_id, 0.0) + 1.0 / (60 + rank)
+                    visual_ids = sorted(rrf, key=rrf.get, reverse=True)[:3]
             else:
                 rrf: dict[str, float] = {}
                 for ranking in (visual_ids, audio_ids):
@@ -531,8 +543,8 @@ def verify_cards(
 
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized train-derived dev or holdout is allowed")
-    if fusion and fusion_policy not in {"rrf", "clap"}:
-        raise ValueError("fusion_policy must be rrf or clap")
+    if fusion and fusion_policy not in {"rrf", "clap", "routed"}:
+        raise ValueError("fusion_policy must be rrf, clap, or routed")
     volume.reload()
     timeline_id = f"{fold}-{timeline_index:03d}"
     card_tag = (
@@ -715,8 +727,12 @@ def main(
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True, "rrf"), indent=2))
     elif action == "cards-fused-clap":
         print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True, "clap"), indent=2))
+    elif action == "cards-routed":
+        print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True, "routed"), indent=2))
     elif action == "verify-fused-clap":
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True, "clap"), indent=2))
+    elif action == "verify-routed":
+        print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True, "routed"), indent=2))
     elif action == "verify-neutral":
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, False, True), indent=2))
     elif action == "verify-full":
