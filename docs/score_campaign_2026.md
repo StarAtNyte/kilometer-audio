@@ -25,10 +25,11 @@ KilometerAudio labels may be used for tuning.
 | 578996 | 2026-08-13 05:45 | private | finished | **0.366** | current best verified score |
 | 579002 | 2026-08-13 06:50 | private | finished | 0.336 | preserved fallback |
 | 579160 | 2026-08-14 18:52 | private | finished | 0.338 | KITE-5; explicitly preserved |
-| 579327 | 2026-08-17 05:54 | private | submitted | pending | KITE-6 controlled experiment; score pending |
+| 579327 | 2026-08-17 05:54 | private | finished | 0.268 | KITE-6 controlled experiment; below current best |
 
-The phase API currently lists 5 submissions, leaving approximately 25 of the
-30 total allowance, with a maximum of 2 per day. Private runs are diagnostic
+The phase API currently lists 6 submissions, leaving 24 of the 30 total
+allowance, with a maximum of 2 per day. On 2026-08-17 UTC, one submission was
+used. Private runs are diagnostic
 and are not leaderboard-eligible.
 
 ## Preserved artifacts
@@ -36,7 +37,8 @@ and are not leaderboard-eligible.
 - Current best official run: `578996`, Top-1 `0.366`.
 - Preserved KITE-5 run: `579160`, Top-1 `0.338`.
 - Preserved fallback run: `579002`, Top-1 `0.336`.
-- Private KITE-6 artifact has not been submitted.
+- Private KITE-6 artifact was submitted as run `579327`; its returned Top-1 was
+  0.268, so it is not a promoted candidate.
 
 ## Data boundary
 
