@@ -239,8 +239,11 @@ def generate_validation(
             for center in centers:
                 if all(abs(center - prior) >= 25 for prior in deduped):
                     deduped.append(center)
-            centers = deduped[:5]
-            intervals = [[max(0.0, center - 12.0), min(duration, center + 12.0)] for center in centers]
+            centers = deduped[:3]
+            intervals = [
+                [max(0.0, center - 12.0), min(duration, center + 12.0)]
+                for center in centers
+            ]
         else:
             intervals = [[max(0.0, min(duration, float(start))), max(0.0, min(duration, float(end)))] for start, end in row["intervals"] if float(end) > float(start)]
             intervals = [[start, end] for start, end in intervals if end > start]
@@ -256,11 +259,28 @@ def generate_validation(
                 image_points.append((start + end) / 2.0)
         for image_index, timestamp in enumerate(image_points):
             image_path = Path("/tmp") / f"kite4-{index}-{image_index}.jpg"
-            image_render = subprocess.run(["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(source), "-frames:v", "1", "-q:v", "5", str(image_path)], capture_output=True, text=True, check=False)
+            image_render = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-ss", str(timestamp), "-i", str(source),
+                    "-frames:v", "1", "-q:v", "5", str(image_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
             if image_render.returncode == 0 and image_path.exists():
                 image_paths.append(image_path)
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
-        subprocess.run(["ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000", str(audio_path)], check=True, capture_output=True)
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000",
+                str(audio_path),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=180,
+        )
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
             for option_id, option in enumerate(payload["options"])
