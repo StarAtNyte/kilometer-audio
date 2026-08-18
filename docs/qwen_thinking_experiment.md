@@ -17,13 +17,18 @@ is not claimed yet.
 
 ## Authorized result
 
-- Fold: `holdout-000`
-- Queries: 8
-- Parsed: 8/8
-- Correct: 3/8 (37.5%)
-- Model: `Qwen/Qwen3-Omni-30B-A3B-Thinking`
-- Policy: `omni_reasoner_zoom_probe`
+The complete fixed five-timeline holdout transfer sample was evaluated:
 
-The probe is parseable but below the frozen RRF verifier's 4/8 result on the
-same timeline. It is not promoted or transferred to test generation. The raw
-reasoning output remains private on Modal storage.
+| Timeline | Correct | Accuracy |
+|---|---:|---:|
+| holdout-000 | 3/8 | 37.5% |
+| holdout-001 | 4/8 | 50.0% |
+| holdout-002 | 4/8 | 50.0% |
+| holdout-003 | 4/8 | 50.0% |
+| holdout-004 | 5/8 | 62.5% |
+| **Total** | **20/40** | **50.0%** |
+
+All 40 responses parsed. The frozen RRF verifier scored 21/40 (52.5%) on the
+same sample, so this deterministic first-interval zoom policy is rejected and
+will not be transferred to test generation. The raw reasoning output remains
+private on Modal storage.
