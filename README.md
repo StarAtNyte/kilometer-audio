@@ -300,6 +300,31 @@ test manifest and media indexes are ingested.
 Challenge: **Perception Test Challenge 2026 — Task 3 — KilometerAudio**
 (EvalAI challenge `2706`). Competition entries are ranked by Top-1 accuracy.
 
+### Current leaderboard snapshot
+
+This table is the campaign leaderboard we maintain in-repository. It includes
+our private submissions as well as public entries: private runs are counted
+because any eligible private run may be made public later. The `Public
+leaderboard` column is the currently visible public result; this table is not a
+claim that private runs appear in EvalAI's public ranking.
+
+**Snapshot: 2026-08-20 UTC.** Update this table and `docs/score_campaign_2026.md`
+whenever a submission status or score changes.
+
+| Rank view | Run | Visibility | Candidate | Top-1 | Note |
+|---:|---:|---|---|---:|---|
+| Public leader | 579340 | public | public campaign entry | 0.338 | current visible public reference |
+| 1 | 579586 | private | KITE-8 Gemini 3.6 Flash | **0.452** | current best; 488/500 Gemini answers |
+| 2 | 579572 | private | KITE-8 Gemini retry | 0.428 | superseded by 579586 |
+| 3 | 579533 | private | KITE-8 Gemini partial | 0.380 | superseded by 579572 |
+| 4 | 578996 | private | verified KITE candidate | 0.366 | previous best |
+| 5 | 579160 | private | KITE-5 | 0.338 | preserved fallback |
+| 6 | 579002 | private | earlier fallback | 0.336 | preserved |
+| 7 | 579338 | private | KITE-7 RRF | 0.242 | rejected |
+
+**Campaign count:** 17 of 30 total submissions used; 24-hour limit respected.
+The preserved fallback is `579160` (and historical fallback `579002`).
+
 | Phase | Opens (Asia/Kathmandu) | Closes (Asia/Kathmandu) |
 |---|---:|---:|
 | Validation | 2026-06-05 05:45 | 2026-08-28 05:44:59 |
