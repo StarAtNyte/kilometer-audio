@@ -19,3 +19,6 @@ models/
 *.flac
 *.npy
 *.npz
+
+# pi runtime artifacts
+.pi-subagents/

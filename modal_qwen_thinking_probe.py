@@ -23,7 +23,7 @@ image = (
 def render_card(source: Path, start: float, end: float, output: Path, audio: Path) -> None:
     duration = max(0.1, end - start)
     subprocess.run(
-        ["ffmpeg", "-y", "-ss", str(start), "-t", str(duration), "-i", str(source), "-an", "-vf", "fps=2", "-c:v", "libx264", str(output)],
+        ["ffmpeg", "-y", "-ss", str(start), "-t", str(duration), "-i", str(source), "-an", "-vf", "fps=1", "-c:v", "libx264", str(output)],
         check=True, capture_output=True, timeout=180,
     )
     subprocess.run(
@@ -60,20 +60,30 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8) -> dic
     with tempfile.TemporaryDirectory() as tmp:
         temp = Path(tmp)
         for index, card in enumerate(cards):
-            video = temp / f"card-{index}.mp4"
-            audio = temp / f"card-{index}.wav"
-            start, end = card["intervals"][0]
-            segment = next(item for item in materialized["segments"] if item["start"] <= start < item["end"])
-            source = source_by_video[segment["video_id"]]
-            local_start = start - float(segment["start"])
-            local_end = min(end, float(segment["end"])) - float(segment["start"])
-            render_card(source, local_start, local_end, video, audio)
+            media = []
+            for interval_index, (start, end) in enumerate(card["intervals"][:2]):
+                video = temp / f"card-{index}-{interval_index}.mp4"
+                audio = temp / f"card-{index}-{interval_index}.wav"
+                segment = next(item for item in materialized["segments"] if item["start"] <= start < item["end"])
+                source = source_by_video[segment["video_id"]]
+                local_start = start - float(segment["start"])
+                local_end = min(end, float(segment["end"])) - float(segment["start"])
+                render_card(source, local_start, local_end, video, audio)
+                media.append((start, end, video, audio))
             options = "\n".join(f"{i}. {x}" for i, x in enumerate(card["options"]))
             prompt = ("Inspect the evidence video and audio. First reason about which exact timestamp and modality support the answer. "
                       "If evidence is insufficient, identify the missing temporal detail before deciding. "
                       "Finish with exactly one line `FINAL: <digit>` where digit is 0, 1, 2, 3, or 4.\n"
                       f"Question: {card['question']}\nOptions:\n{options}")
-            conversation = [{"role": "user", "content": [{"type": "video", "video": video.resolve().as_uri()}, {"type": "audio", "audio": audio.resolve().as_uri()}, {"type": "text", "text": prompt}]}]
+            content = []
+            for start, end, video, audio in media:
+                content.extend([
+                    {"type": "text", "text": f"Evidence interval {start:.1f}-{end:.1f} seconds:"},
+                    {"type": "video", "video": video.resolve().as_uri()},
+                    {"type": "audio", "audio": audio.resolve().as_uri()},
+                ])
+            content.append({"type": "text", "text": prompt})
+            conversation = [{"role": "user", "content": content}]
             chat = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
             audios, images, videos = process_mm_info(conversation, use_audio_in_video=False)
             inputs = processor(text=chat, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True, use_audio_in_video=False).to(model.device).to(model.dtype)

@@ -10,10 +10,12 @@ probe stores outputs only under the authorized evaluation tree. No KilometerAudi
 validation/test labels are used for fitting, prompting, routing, or selection.
 
 This is an inference implementation of the OmniReasoner idea: preserve a
-question-directed global retrieval result, zoom into a local interval, and ask
-the thinking model to verify before answering. The current probe uses the first
-retrieved interval as the deterministic zoom target; learned interval selection
-is not claimed yet.
+question-directed global retrieval result, zoom into local intervals, and ask
+the thinking model to verify before answering. The measured baseline used the
+first retrieved interval as the deterministic zoom target; learned interval
+selection is not claimed. A follow-up two-interval/1-FPS attempt was started
+but exceeded A100 memory during multimodal prefill and was aborted, so it is not
+an evaluated candidate.
 
 ## Authorized result
 

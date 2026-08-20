@@ -23,6 +23,32 @@ VOLUME_NAME = "perception-test-2026-data"
 MODEL_NAME = os.getenv("KITE_MOSS_MODEL", "OpenMOSS-Team/MOSS-Audio-8B-Thinking")
 UNUSABLE_VIDEOS = {"yzDPjzyl-ek", "idx41AgnL6U", "oj_G_Dc9RBM", "V_Yl5Fwujqs", "n2o2EzjaBfE", "V-43u9V8k0s"}
 
+SPATIAL_PATTERNS = (
+    r"\b(left|right|clockwise|counterclockwise|direction|orientation|oriented|heading|facing)\b",
+    r"\b(north|south|east|west|northeast|northwest|southeast|southwest)\b",
+    r"\b(turn|turned|turning|turns|rotate|rotated|behind|in front of)\b",
+    r"\b(distance|farther|farthest|nearest|closest|meters?|kilometers?|miles?|feet|blocks?)\b",
+    r"\b(how far|closer to|further from)\b",
+    r"\b(before|after|first|last|earlier|later|next|previously|subsequently)\b",
+    r"\b(on the way|along the route|path|route|walking|walked|passed by)\b",
+    r"\b(where|location|located|positioned|beside|between|across from|adjacent|nearby)\b",
+    r"\b(left of|right of|in front of|behind|next to|opposite)\b",
+    r"\b(seen|visible|appears?|shown|encountered|visited|passed|present)\b",
+    r"\b(landmark|building|statue|monument|church|temple|bridge|sign|store|shop)\b",
+)
+
+
+def _is_spatial_mcq(row: dict[str, Any]) -> bool:
+    text = " ".join(
+        (
+            str(row.get("question") or ""),
+            str(row.get("area") or ""),
+            str(row.get("reasoning") or ""),
+            " ".join(map(str, row.get("tags") or [])),
+        )
+    ).lower()
+    return any(re.search(pattern, text) for pattern in SPATIAL_PATTERNS)
+
 app = modal.App(APP_NAME)
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
 
@@ -443,6 +469,60 @@ def train_mcq_lora(epochs: float = 1.0) -> dict[str, Any]:
 
 @app.function(
     image=moss_image,
+    gpu=os.getenv("KITE_TRAIN_GPU", "H100"),
+    volumes={"/data": volume},
+    memory=65536,
+    timeout=12 * 60 * 60,
+)
+def train_spatial_mcq_lora(epochs: float = 1.0) -> dict[str, Any]:
+    """Train a separately namespaced adapter on train-fold spatial MCQs only."""
+    volume.reload()
+    model_dir = TRACK_ROOT / "models" / "moss" / MODEL_NAME.rsplit("/", 1)[-1]
+    folds = Path("/data/allowed-training/perception-test/folds")
+    counts: dict[str, int] = {}
+    for fold in ("train", "dev"):
+        raw = [json.loads(line) for line in (folds / f"mcq_{fold}.jsonl").read_text().splitlines()]
+        moss = (folds / f"moss_mcq_{fold}.jsonl").read_text().splitlines()
+        if len(raw) != len(moss):
+            raise ValueError(f"Raw/MOSS row mismatch for {fold}: {len(raw)} != {len(moss)}")
+        selected = [encoded for row, encoded in zip(raw, moss) if _is_spatial_mcq(row)]
+        destination = folds / f"moss_mcq_spatial_{fold}.jsonl"
+        temporary = destination.with_suffix(".jsonl.partial")
+        temporary.write_text("\n".join(selected) + "\n")
+        os.replace(temporary, destination)
+        counts[fold] = len(selected)
+    output_dir = TRACK_ROOT / "models" / "moss" / "kite2-spatial-mcq-lora"
+    command = [
+        "python", "/opt/moss-audio/finetune/finetune.py",
+        "--model_dir", str(model_dir), "--attn_implementation", "eager",
+        "--data_path", str(folds / "moss_mcq_spatial_train.jsonl"),
+        "--eval_data_path", str(folds / "moss_mcq_spatial_dev.jsonl"),
+        "--output_dir", str(output_dir), "--use_lora", "--lora_rank", "32",
+        "--lora_alpha", "64", "--bf16", "--max_len", "2048",
+        "--per_device_train_batch_size", "1", "--per_device_eval_batch_size", "1",
+        "--gradient_accumulation_steps", "8", "--num_train_epochs", str(epochs),
+        "--learning_rate", "5e-5", "--logging_steps", "10", "--save_steps", "50",
+        "--save_total_limit", "5", "--eval_strategy", "steps", "--eval_steps", "50",
+        "--report_to", "none",
+    ]
+    resume_checkpoints = sorted(
+        output_dir.glob("checkpoint-*"),
+        key=lambda path: int(path.name.rsplit("-", 1)[-1]),
+    )
+    if resume_checkpoints:
+        command.extend(["--resume_from_checkpoint", str(resume_checkpoints[-1])])
+    subprocess.run(command, check=True, cwd="/opt/moss-audio")
+    volume.commit()
+    return {
+        "output_dir": str(output_dir), "epochs": epochs, "counts": counts,
+        "checkpoints": sorted(path.name for path in output_dir.glob("checkpoint-*")),
+        "training_source": "official Perception Test spatial MCQ train subset only",
+        "kilometer_validation_used": False,
+    }
+
+
+@app.function(
+    image=moss_image,
     gpu=os.getenv("KITE_MOSS_GPU", "H100"),
     volumes={"/data": volume},
     memory=65536,
@@ -474,7 +554,12 @@ def evaluate_internal_mcq(
     )
     adapter_dir: Path | None = None
     if adapter != "base":
-        if adapter.startswith("mcq-"):
+        if adapter.startswith("spatial-"):
+            adapter_dir = (
+                TRACK_ROOT / "models" / "moss" / "kite2-spatial-mcq-lora"
+                / adapter.removeprefix("spatial-")
+            )
+        elif adapter.startswith("mcq-"):
             adapter_dir = (
                 TRACK_ROOT
                 / "models"
@@ -603,6 +688,8 @@ def main(
         print(json.dumps(train_sound_lora.remote(), indent=2))
     elif action == "train-mcq-lora":
         print(json.dumps(train_mcq_lora.remote(), indent=2))
+    elif action == "train-spatial-mcq-lora":
+        print(json.dumps(train_spatial_mcq_lora.remote(), indent=2))
     elif action == "evaluate-internal-mcq":
         print(json.dumps(evaluate_internal_mcq.remote(fold, adapter), indent=2))
     else:

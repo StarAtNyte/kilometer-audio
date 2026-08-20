@@ -66,9 +66,11 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
     cards = [json.loads(line) for line in cards_path.read_text().splitlines()][:limit]
     raw_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GOOGLE_API_KEYS") or ""
     keys = [x.strip() for x in raw_keys.split(",") if x.strip()]
-    single = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if single and single not in keys:
-        keys.insert(0, single)
+    single_names = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "google_api_key_0")
+    for name in single_names:
+        single = os.getenv(name)
+        if single and single not in keys:
+            keys.insert(0, single)
     if not keys:
         raise RuntimeError("Gemini secrets must expose GEMINI_API_KEY(S) or GOOGLE_API_KEY(S)")
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -87,7 +89,7 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                 "Return exactly one digit 0, 1, 2, 3, or 4 and nothing else.\n"
                 f"Question: {card['question']}\nOptions:\n{options}"
             )
-            for retry in range(5):
+            for retry in range(8):
                 for attempt in range(len(keys)):
                     key = keys[(key_index + attempt) % len(keys)]
                     response = requests.post(
@@ -103,8 +105,11 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                         break
                 if response.status_code not in {429, 500, 502, 503, 504}:
                     break
-                time.sleep(2 ** retry)
+                retry_after = response.headers.get("Retry-After")
+                delay = float(retry_after) if retry_after else min(2 ** retry, 60)
+                time.sleep(delay)
             response.raise_for_status()
+            time.sleep(2)
             payload = response.json()
             text = "".join(
                 part.get("text", "")
