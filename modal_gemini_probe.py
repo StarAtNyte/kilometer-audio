@@ -53,14 +53,19 @@ def render_card(source: Path, intervals: list[list[float]], output: Path) -> Non
 
 @app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool], timeout=60 * 60)
 def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
-          model: str = "gemini-2.5-flash") -> dict[str, Any]:
+          model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict") -> dict[str, Any]:
     import requests
 
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized dev/holdout folds are allowed")
     volume.reload()
     timeline = f"{fold}-{timeline_index:03d}"
-    cards_path = TRACK_ROOT / "evaluations" / fold / "cards" / f"{timeline}-fused-8.jsonl"
+    if card_policy not in {"fused", "routed", "clap"}:
+        raise ValueError("card_policy must be fused, routed, or clap")
+    if prompt_policy not in {"strict", "grounded"}:
+        raise ValueError("prompt_policy must be strict or grounded")
+    card_tag = "fused-8" if card_policy == "fused" else f"fused-{card_policy}-8"
+    cards_path = TRACK_ROOT / "evaluations" / fold / "cards" / f"{timeline}-{card_tag}.jsonl"
     if not cards_path.exists():
         raise FileNotFoundError(f"Missing cards: {cards_path}; materialize/build them first")
     cards = [json.loads(line) for line in cards_path.read_text().splitlines()][:limit]
@@ -84,11 +89,16 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
             render_card(source, card["intervals"], video)
             encoded = base64.b64encode(video.read_bytes()).decode("ascii")
             options = "\n".join(f"{i}. {x}" for i, x in enumerate(card["options"]))
-            prompt = (
+            instruction = (
                 "Answer the multiple-choice question using only the attached evidence video. "
-                "Return exactly one digit 0, 1, 2, 3, or 4 and nothing else.\n"
-                f"Question: {card['question']}\nOptions:\n{options}"
+                "Return exactly one digit 0, 1, 2, 3, 4 and nothing else."
+                if prompt_policy == "strict" else
+                "Inspect both visual frames and audio across all evidence intervals. "
+                "Reason silently about the exact temporal or counting requirement, "
+                "then choose only the option directly supported by the evidence. "
+                "Return exactly one digit 0, 1, 2, 3, or 4 and nothing else."
             )
+            prompt = f"{instruction}\nQuestion: {card['question']}\nOptions:\n{options}"
             for retry in range(8):
                 for attempt in range(len(keys)):
                     key = keys[(key_index + attempt) % len(keys)]
@@ -120,17 +130,17 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                          "answer_id": card["answer_id"], "raw": text})
     correct = sum(row["prediction"] == row["answer_id"] for row in rows)
     result = {"fold": fold, "timeline": timeline, "model": model,
-              "queries": len(rows), "parsed": sum(r["prediction"] is not None for r in rows),
+              "card_policy": card_policy, "prompt_policy": prompt_policy, "queries": len(rows), "parsed": sum(r["prediction"] is not None for r in rows),
               "correct": correct, "accuracy": correct / len(rows) if rows else 0.0,
               "kilometer_validation_used": False, "rows": rows}
     output = TRACK_ROOT / "evaluations" / fold / "gemini"
     output.mkdir(parents=True, exist_ok=True)
-    (output / f"{timeline}-{model.replace('/', '_')}.json").write_text(json.dumps(result, indent=2) + "\n")
+    (output / f"{timeline}-{model.replace('/', '_')}-{card_policy}-{prompt_policy}.json").write_text(json.dumps(result, indent=2) + "\n")
     volume.commit()
     return result
 
 
 @app.local_entrypoint()
 def main(fold: str = "holdout", timeline: int = 0, limit: int = 8,
-         model: str = "gemini-2.5-flash") -> None:
-    print(json.dumps(probe.remote(fold, timeline, limit, model), indent=2))
+         model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict") -> None:
+    print(json.dumps(probe.remote(fold, timeline, limit, model, card_policy, prompt_policy), indent=2))

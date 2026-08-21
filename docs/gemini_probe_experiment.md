@@ -40,3 +40,9 @@ this candidate clears the internal promotion gate by +17.5 pp with full parse
 coverage. It is the strongest authorized-fold candidate produced in this
 campaign to date. No EvalAI submission was made from this experiment; no
 KilometerAudio validation/test answers were used for model selection.
+
+A retrieval ablation with Gemini 3.6 Flash was also run on holdout-000:
+`fused-routed` cards scored 6/8 (75.0%) and `fused-clap` cards scored 5/8
+(62.5%), versus 7/8 (87.5%) for the frozen fused cards. Both are rejected.
+A grounded prompt variant was implemented but could not be run because the
+Modal workspace spend limit was reached; it has no measured result.
