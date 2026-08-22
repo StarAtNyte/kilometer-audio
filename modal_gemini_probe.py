@@ -53,7 +53,7 @@ def render_card(source: Path, intervals: list[list[float]], output: Path) -> Non
 
 @app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool], timeout=60 * 60)
 def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
-          model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict") -> dict[str, Any]:
+          model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict", temperature: float = 0.0) -> dict[str, Any]:
     import requests
 
     if fold not in {"dev", "holdout"}:
@@ -64,6 +64,8 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
         raise ValueError("card_policy must be fused, routed, or clap")
     if prompt_policy not in {"strict", "grounded"}:
         raise ValueError("prompt_policy must be strict or grounded")
+    if not 0.0 <= temperature <= 1.0:
+        raise ValueError("temperature must be between 0 and 1")
     card_tag = "fused-8" if card_policy == "fused" else f"fused-{card_policy}-8"
     cards_path = TRACK_ROOT / "evaluations" / fold / "cards" / f"{timeline}-{card_tag}.jsonl"
     if not cards_path.exists():
@@ -107,7 +109,7 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                         json={"contents": [{"parts": [
                             {"inline_data": {"mime_type": "video/mp4", "data": encoded}},
                             {"text": prompt},
-                        ]}], "generationConfig": {"temperature": 0}},
+                        ]}], "generationConfig": {"temperature": temperature}},
                         timeout=300,
                     )
                     if response.status_code not in {429, 500, 502, 503, 504}:
@@ -130,17 +132,17 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                          "answer_id": card["answer_id"], "raw": text})
     correct = sum(row["prediction"] == row["answer_id"] for row in rows)
     result = {"fold": fold, "timeline": timeline, "model": model,
-              "card_policy": card_policy, "prompt_policy": prompt_policy, "queries": len(rows), "parsed": sum(r["prediction"] is not None for r in rows),
+              "card_policy": card_policy, "prompt_policy": prompt_policy, "temperature": temperature, "queries": len(rows), "parsed": sum(r["prediction"] is not None for r in rows),
               "correct": correct, "accuracy": correct / len(rows) if rows else 0.0,
               "kilometer_validation_used": False, "rows": rows}
     output = TRACK_ROOT / "evaluations" / fold / "gemini"
     output.mkdir(parents=True, exist_ok=True)
-    (output / f"{timeline}-{model.replace('/', '_')}-{card_policy}-{prompt_policy}.json").write_text(json.dumps(result, indent=2) + "\n")
+    (output / f"{timeline}-{model.replace('/', '_')}-{card_policy}-{prompt_policy}-t{temperature:g}.json").write_text(json.dumps(result, indent=2) + "\n")
     volume.commit()
     return result
 
 
 @app.local_entrypoint()
 def main(fold: str = "holdout", timeline: int = 0, limit: int = 8,
-         model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict") -> None:
-    print(json.dumps(probe.remote(fold, timeline, limit, model, card_policy, prompt_policy), indent=2))
+         model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict", temperature: float = 0.0) -> None:
+    print(json.dumps(probe.remote(fold, timeline, limit, model, card_policy, prompt_policy, temperature), indent=2))

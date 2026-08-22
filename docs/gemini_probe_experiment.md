@@ -44,5 +44,7 @@ KilometerAudio validation/test answers were used for model selection.
 A retrieval ablation with Gemini 3.6 Flash was also run on holdout-000:
 `fused-routed` cards scored 6/8 (75.0%) and `fused-clap` cards scored 5/8
 (62.5%), versus 7/8 (87.5%) for the frozen fused cards. Both are rejected.
-A grounded prompt variant was implemented but could not be run because the
-Modal workspace spend limit was reached; it has no measured result.
+A grounded prompt variant scored 5/8 (62.5%) and was rejected. A stochastic
+strict-prompt sample at temperature 0.3 also scored 5/8 (62.5%), versus 7/8
+for deterministic temperature 0, so sampling is rejected. The 0.3 run was
+performed on the migrated `whitestjohn0` Volume.
