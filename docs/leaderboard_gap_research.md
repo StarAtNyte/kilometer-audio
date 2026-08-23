@@ -36,7 +36,13 @@ then a second Gemini call answers from the caption. On holdout-000 it scored
 5/8 (62.5%), below the direct evidence-card Gemini baseline of 7/8 (87.5%).
 The generic caption variant is rejected. A question-guided caption variant was
 started but hit Gemini HTTP 429 quota after the first run; it has no measured
-result. Keep the current Gemini evidence-card candidate frozen; do not use
-hidden test labels or infer competitor answers. A caption index remains worth
-revisiting only with full-video/window coverage rather than captions of already
-retrieved clips.
+result.
+
+The correct global experiment is now implemented in
+`modal_caption_index.py`. It creates overlapping timestamped windows with
+`window_id`, `start_sec`, `end_sec`, and `caption` fields, then caption-fills
+those windows resumably via Gemini. The holdout-000 index contains 54 windows
+(30-second windows, 20-second stride); one caption was successfully cached
+before the current API quota interruption. It is not yet an evaluated answer
+candidate. Keep the current Gemini evidence-card candidate frozen; do not use
+hidden test labels or infer competitor answers.
