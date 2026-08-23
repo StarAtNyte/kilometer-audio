@@ -48,3 +48,10 @@ A grounded prompt variant scored 5/8 (62.5%) and was rejected. A stochastic
 strict-prompt sample at temperature 0.3 also scored 5/8 (62.5%), versus 7/8
 for deterministic temperature 0, so sampling is rejected. The 0.3 run was
 performed on the migrated `whitestjohn0` Volume.
+
+The public method label `3.5-flash over caption index` was tested directly:
+Gemini 3.5 Flash with the existing fused evidence cards scored holdout-000
+4/8 and holdout-001 7/8 (11/16 overall) before its free quota returned HTTP
+429. It is below Gemini 3.6 Flash's 13/16 on the same pair and is not promoted.
+The caption-index portion still requires a full audio-aware window index; the
+local Qwen captions are not an equivalent.
