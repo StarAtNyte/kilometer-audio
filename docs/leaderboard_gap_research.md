@@ -34,6 +34,10 @@ A first caption-index ablation was implemented in
 `modal_gemini_caption_probe.py`: Gemini captions the retrieved evidence clip,
 then a second Gemini call answers from the caption. On holdout-000 it scored
 5/8 (62.5%), below the direct evidence-card Gemini baseline of 7/8 (87.5%).
+The full-window audio-aware Gemini 3.5 index was then successfully cached for
+54 holdout-000 windows; caption-index answer scoring reached 6/8 (75.0%) on
+holdout-000 and 3/8 (37.5%) on holdout-001 with partial 32/56-window coverage.
+It is not yet a promotion candidate.
 The generic caption variant is rejected. A question-guided caption variant was
 started but hit Gemini HTTP 429 quota after the first run; it has no measured
 result.

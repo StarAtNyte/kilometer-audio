@@ -17,6 +17,7 @@ volume = modal.Volume.from_name("perception-test-2026-data", create_if_missing=F
 image = modal.Image.debian_slim(python_version="3.11").apt_install("ffmpeg").pip_install("requests")
 secret = modal.Secret.from_name("gemini-api-key")
 secret_pool = modal.Secret.from_name("gemini-api-keys")
+secret_rotation = modal.Secret.from_name("gemini-rotation-keys")
 
 
 def render_window(source: Path, start: float, end: float, output: Path) -> None:
@@ -48,7 +49,7 @@ def build_windows(fold: str = "holdout", timeline_index: int = 0, window_seconds
     return {"fold": fold, "timeline": timeline, "windows": len(rows), "window_seconds": window_seconds, "stride_seconds": stride_seconds, "kilometer_validation_used": False, "path": str(path)}
 
 
-@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool], timeout=6 * 60 * 60)
+@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool, secret_rotation], timeout=6 * 60 * 60)
 def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int = 0, model: str = "gemini-3.6-flash") -> dict[str, Any]:
     import requests
 
@@ -59,7 +60,8 @@ def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int =
     path = ROOT / "evaluations" / fold / "caption_index" / f"{timeline}-windows.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     work_rows = rows[:limit] if limit else rows
-    keys = [x.strip() for x in (os.getenv("GEMINI_API_KEYS") or os.getenv("GOOGLE_API_KEYS") or "").split(",") if x.strip()]
+    raw_keys = ",".join(value for value in (os.getenv("GEMINI_API_KEYS"), os.getenv("GOOGLE_API_KEYS"), os.getenv("GEMINI_ROTATION_KEYS")) if value)
+    keys = list(dict.fromkeys(x.strip() for x in raw_keys.split(",") if x.strip()))
     for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "google_api_key_0"):
         if os.getenv(name) and os.getenv(name) not in keys:
             keys.insert(0, os.getenv(name))
@@ -79,10 +81,10 @@ def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int =
                 response = None
                 for attempt, key in enumerate(keys):
                     response = requests.post(endpoint, params={"key": key}, json=payload, timeout=300)
-                    if response.status_code not in {429, 500, 502, 503, 504}:
+                    if response.status_code not in {400, 401, 403, 429, 500, 502, 503, 504}:
                         key_index = (key_index + attempt) % len(keys)
                         break
-                if response is not None and response.status_code not in {429, 500, 502, 503, 504}:
+                if response is not None and response.status_code not in {400, 401, 403, 429, 500, 502, 503, 504}:
                     break
                 time.sleep(float(response.headers.get("Retry-After", min(2**retry, 60))))
             response.raise_for_status()
@@ -93,11 +95,11 @@ def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int =
 
 
 @app.local_entrypoint()
-def main(action: str = "build", fold: str = "holdout", timeline: int = 0, limit: int = 0) -> None:
+def main(action: str = "build", fold: str = "holdout", timeline: int = 0, limit: int = 0, model: str = "gemini-3.6-flash") -> None:
     if action == "build":
         result = build_windows.remote(fold, timeline)
     elif action == "caption":
-        result = caption_windows.remote(fold, timeline, limit)
+        result = caption_windows.remote(fold, timeline, limit, model)
     else:
         raise ValueError("action must be build or caption")
     print(json.dumps(result, indent=2))

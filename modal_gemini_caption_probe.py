@@ -18,6 +18,7 @@ volume = modal.Volume.from_name("perception-test-2026-data", create_if_missing=F
 image = modal.Image.debian_slim(python_version="3.11").apt_install("ffmpeg").pip_install("requests")
 secret = modal.Secret.from_name("gemini-api-key")
 secret_pool = modal.Secret.from_name("gemini-api-keys")
+secret_rotation = modal.Secret.from_name("gemini-rotation-keys")
 
 
 def render_card(source: Path, intervals: list[list[float]], output: Path) -> None:
@@ -36,7 +37,7 @@ def parse_digit(text: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool], timeout=90 * 60)
+@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool, secret_rotation], timeout=90 * 60)
 def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model: str = "gemini-3.6-flash") -> dict[str, Any]:
     import requests
 
@@ -45,7 +46,8 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model:
     volume.reload()
     timeline = f"{fold}-{timeline_index:03d}"
     cards = [json.loads(x) for x in (ROOT / "evaluations" / fold / "cards" / f"{timeline}-fused-8.jsonl").read_text().splitlines()][:limit]
-    keys = [x.strip() for x in (os.getenv("GEMINI_API_KEYS") or os.getenv("GOOGLE_API_KEYS") or "").split(",") if x.strip()]
+    raw_keys = ",".join(value for value in (os.getenv("GEMINI_API_KEYS"), os.getenv("GOOGLE_API_KEYS"), os.getenv("GEMINI_ROTATION_KEYS")) if value)
+    keys = list(dict.fromkeys(x.strip() for x in raw_keys.split(",") if x.strip()))
     for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "google_api_key_0"):
         if os.getenv(name) and os.getenv(name) not in keys:
             keys.insert(0, os.getenv(name))

@@ -23,6 +23,7 @@ image = (
 )
 secret = modal.Secret.from_name("gemini-api-key")
 secret_pool = modal.Secret.from_name("gemini-api-keys")
+secret_rotation = modal.Secret.from_name("gemini-rotation-keys")
 
 
 def parse_digit(text: str) -> int | None:
@@ -51,7 +52,7 @@ def render_card(source: Path, intervals: list[list[float]], output: Path) -> Non
     )
 
 
-@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool], timeout=60 * 60)
+@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool, secret_rotation], timeout=60 * 60)
 def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
           model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict", temperature: float = 0.0) -> dict[str, Any]:
     import requests
@@ -71,8 +72,14 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
     if not cards_path.exists():
         raise FileNotFoundError(f"Missing cards: {cards_path}; materialize/build them first")
     cards = [json.loads(line) for line in cards_path.read_text().splitlines()][:limit]
-    raw_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GOOGLE_API_KEYS") or ""
-    keys = [x.strip() for x in raw_keys.split(",") if x.strip()]
+    raw_keys = ",".join(
+        value for value in (
+            os.getenv("GEMINI_API_KEYS"),
+            os.getenv("GOOGLE_API_KEYS"),
+            os.getenv("GEMINI_ROTATION_KEYS"),
+        ) if value
+    )
+    keys = list(dict.fromkeys(x.strip() for x in raw_keys.split(",") if x.strip()))
     single_names = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "google_api_key_0")
     for name in single_names:
         single = os.getenv(name)
