@@ -308,22 +308,25 @@ because any eligible private run may be made public later. The `Public
 leaderboard` column is the currently visible public result; this table is not a
 claim that private runs appear in EvalAI's public ranking.
 
-**Snapshot: 2026-08-20 UTC.** Update this table and `docs/score_campaign_2026.md`
+**Snapshot: 2026-08-23 UTC.** Update this table and `docs/score_campaign_2026.md`
 whenever a submission status or score changes.
 
 | Rank view | Run | Visibility | Candidate | Top-1 | Note |
 |---:|---:|---|---|---:|---|
-| Public leader | 579340 | public | public campaign entry | 0.338 | current visible public reference |
-| 1 | 579586 | private | KITE-8 Gemini 3.6 Flash | **0.452** | current best; 488/500 Gemini answers |
-| 2 | 579572 | private | KITE-8 Gemini retry | 0.428 | superseded by 579586 |
-| 3 | 579533 | private | KITE-8 Gemini partial | 0.380 | superseded by 579572 |
-| 4 | 578996 | private | verified KITE candidate | 0.366 | previous best |
-| 5 | 579160 | private | KITE-5 | 0.338 | preserved fallback |
-| 6 | 579002 | private | earlier fallback | 0.336 | preserved |
-| 7 | 579338 | private | KITE-7 RRF | 0.242 | rejected |
+| Public leader | 580012 | public | Wind_Rain_Tower | **0.496** | current visible leader |
+| Public #2 | 579758 | public | amanupg — 3.5-flash over caption index | 0.494 | caption-index reference |
+| 1 private | 579586 | private | KITE-8 Gemini 3.6 Flash | 0.452 | current best; 488/500 Gemini answers |
+| 2 private | 579572 | private | KITE-8 Gemini retry | 0.428 | superseded by 579586 |
+| 3 private | 579533 | private | KITE-8 Gemini partial | 0.380 | superseded by 579572 |
+| 4 private | 578996 | private | verified KITE candidate | 0.366 | previous best |
+| 5 private | 579160 | private | KITE-5 | 0.338 | preserved fallback |
+| 6 private | 579002 | private | earlier fallback | 0.336 | preserved |
+| 7 private | 579338 | private | KITE-7 RRF | 0.242 | rejected |
 
-**Campaign count:** 17 of 30 total submissions used; 24-hour limit respected.
-The preserved fallback is `579160` (and historical fallback `579002`).
+**Campaign count:** 17 of 30 total submissions used; the Test Phase allows at
+most two submissions per day. The preserved fallback is `579160` (and
+historical fallback `579002`). We need at least **+0.048** over `579586` to
+match the current public leader and **+0.050** to reach the 0.500 target.
 
 | Phase | Opens (Asia/Kathmandu) | Closes (Asia/Kathmandu) |
 |---|---:|---:|
