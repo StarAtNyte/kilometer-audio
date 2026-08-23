@@ -36,7 +36,7 @@ def parse_answer(text: str) -> int | None:
 
 
 @app.function(image=IMAGE, volumes={"/data": VOLUME}, secrets=[VERTEX_SECRET], timeout=90 * 60)
-def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model: str = "gemini-3.7-flash", card_policy: str = "union", cooldown_sec: float = 15.0) -> dict[str, Any]:
+def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model: str = "gemini-3.7-flash", card_policy: str = "union", prompt_policy: str = "strict", cooldown_sec: float = 15.0) -> dict[str, Any]:
     from google import genai
     from google.genai import types
 
@@ -44,9 +44,8 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model:
     timeline = f"{fold}-{timeline_index:03d}"
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized dev/holdout folds are allowed")
-    card_path = ROOT / "evaluations" / fold / "cards" / f"{timeline}-fused-{card_policy}-8.jsonl"
-    if card_policy == "fused":
-        card_path = ROOT / "evaluations" / fold / "cards" / f"{timeline}-fused-8.jsonl"
+    card_tag = "fused-8" if card_policy == "fused" else "fused5-8" if card_policy == "fused-wide" else f"fused-{card_policy}-8"
+    card_path = ROOT / "evaluations" / fold / "cards" / f"{timeline}-{card_tag}.jsonl"
     rows = [json.loads(line) for line in card_path.read_text().splitlines()][:limit]
     creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     if not creds:
@@ -71,16 +70,17 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model:
                 continue
             clip = Path(tmp) / f"card-{index}.mp4"
             render_card(Path(row["video_path"]), row["intervals"], clip)
-            prompt = ("Answer this multiple-choice question using only the attached walking-tour evidence. "
-                      "Return exactly one answer index digit (0, 1, 2, 3, or 4), with no explanation.\n"
-                      f"Question: {row['question']}\nOptions: " + " | ".join(f"{i}. {option}" for i, option in enumerate(row["options"])))
+            instruction = ("Answer this multiple-choice question using only the attached walking-tour evidence. Return exactly one answer index digit (0, 1, 2, 3, or 4), with no explanation."
+                          if prompt_policy == "strict" else
+                          "Inspect all evidence intervals. Reason silently about the exact temporal, counting, audio, or visual requirement; choose only the option directly supported by the evidence. Return exactly one answer index digit (0, 1, 2, 3, or 4), with no explanation.")
+            prompt = (f"{instruction}\nQuestion: {row['question']}\nOptions: " + " | ".join(f"{i}. {option}" for i, option in enumerate(row["options"])))
             part = types.Part(inline_data=types.Blob(data=clip.read_bytes(), mime_type="video/mp4"), video_metadata=types.VideoMetadata(fps=0.5))
             response = None
             for attempt in range(4):
                 if cooldown_sec:
                     time.sleep(cooldown_sec if attempt == 0 else min(60.0, cooldown_sec * (2 ** attempt)))
                 try:
-                    response = client.models.generate_content(model=model, contents=[types.Content(role="user", parts=[part, types.Part.from_text(text=prompt)])], config=types.GenerateContentConfig(temperature=0, max_output_tokens=32))
+                    response = client.models.generate_content(model=model, contents=[types.Content(role="user", parts=[part, types.Part.from_text(text=prompt)])], config=types.GenerateContentConfig(temperature=0, max_output_tokens=256, thinking_config=types.ThinkingConfig(thinking_level="high")))
                     break
                 except Exception as exc:
                     message = str(exc)
@@ -89,7 +89,7 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model:
             raw = getattr(response, "text", "") or ""
             output_rows.append({"query_id": row["query_id"], "prediction": parse_answer(raw), "answer_id": row["answer_id"], "raw": raw, "intervals": row["intervals"]})
             partial_path.write_text(json.dumps(output_rows, indent=2) + "\n")
-    result = {"fold": fold, "timeline": timeline, "model": model, "card_policy": card_policy, "queries": len(output_rows), "parsed": sum(row["prediction"] is not None for row in output_rows), "correct": sum(row["prediction"] == row["answer_id"] for row in output_rows), "accuracy": sum(row["prediction"] == row["answer_id"] for row in output_rows) / len(output_rows) if output_rows else 0.0, "ground_truth_used_for_inference": False, "rows": output_rows}
+    result = {"fold": fold, "timeline": timeline, "model": model, "card_policy": card_policy, "prompt_policy": prompt_policy, "queries": len(output_rows), "parsed": sum(row["prediction"] is not None for row in output_rows), "correct": sum(row["prediction"] == row["answer_id"] for row in output_rows), "accuracy": sum(row["prediction"] == row["answer_id"] for row in output_rows) / len(output_rows) if output_rows else 0.0, "ground_truth_used_for_inference": False, "rows": output_rows}
     out = ROOT / "evaluations" / fold / "vertex-probes"
     (out / f"{timeline}-{card_policy}-{model}.json").write_text(json.dumps(result, indent=2) + "\n")
     partial_path.unlink(missing_ok=True)
@@ -98,5 +98,5 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model:
 
 
 @app.local_entrypoint()
-def main(fold: str = "holdout", timeline: int = 0, limit: int = 8, model: str = "gemini-3.7-flash", card_policy: str = "union", cooldown_sec: float = 15.0) -> None:
-    print(json.dumps(probe.remote(fold, timeline, limit, model, card_policy, cooldown_sec), indent=2))
+def main(fold: str = "holdout", timeline: int = 0, limit: int = 8, model: str = "gemini-3.7-flash", card_policy: str = "union", prompt_policy: str = "strict", cooldown_sec: float = 15.0) -> None:
+    print(json.dumps(probe.remote(fold, timeline, limit, model, card_policy, prompt_policy, cooldown_sec), indent=2))
