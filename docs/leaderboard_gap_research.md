@@ -42,10 +42,10 @@ The correct global experiment is now implemented in
 `modal_caption_index.py`. It creates overlapping timestamped windows with
 `window_id`, `start_sec`, `end_sec`, and `caption` fields. Local
 `Qwen3-VL-8B-Instruct` captioned all 54 holdout-000 windows (30-second windows,
-20-second stride) on the migrated A10G Volume. A BM25 text retriever over those
-captions reached only 19/211 (9.0%) source recall at top-5, so the local-caption
-+ lexical-retrieval candidate is rejected. This does not invalidate the public
-caption-index lead: the competitor likely uses stronger Gemini captions and
-semantic retrieval. Gemini caption filling remains quota-blocked. Keep the
-current Gemini evidence-card candidate frozen; do not use hidden test labels or
-infer competitor answers.
+20-second stride) on the migrated A10G Volume. BM25 reached only 19/211 (9.0%)
+source recall at top-5; MiniLM semantic retrieval improved this only to 28/211
+(13.3%). Both local-caption candidates are rejected. This does not invalidate
+the public caption-index lead: the competitor likely uses stronger audio-aware
+Gemini captions and semantic retrieval. Gemini caption filling remains
+quota-blocked. Keep the current Gemini evidence-card candidate frozen; do not
+use hidden test labels or infer competitor answers.
