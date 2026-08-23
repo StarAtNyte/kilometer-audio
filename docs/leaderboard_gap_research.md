@@ -40,6 +40,13 @@ holdout-000 and 3/8 (37.5%) on holdout-001 with partial 32/56-window coverage.
 A caption-assisted direct-video variant (original evidence video plus retrieved
 captions) also scored 6/8, below direct Gemini 3.6 at 7/8. It is not yet a
 promotion candidate.
+
+Vertex AI access is configured in `modal_vertex_gemini_probe.py` using the
+profile-local `gcp-vertex-service-account` secret and inline video bytes. A
+bounded Gemini 3.5 Vertex call succeeded at 1/1 on holdout-000. Larger runs
+encountered Vertex 429/504 service quota/deadline responses while another API
+workload was active; the probe now uses configurable cooldowns, retries, and
+partial-result checkpoints. No Vertex candidate has been promoted or submitted.
 The generic caption variant is rejected. A question-guided caption variant was
 started but hit Gemini HTTP 429 quota after the first run; it has no measured
 result.
