@@ -37,7 +37,8 @@ def build_windows(fold: str = "holdout", timeline_index: int = 0, window_seconds
     duration = float(manifest["duration"])
     while start < duration:
         end = min(duration, start + window_seconds)
-        rows.append({"window_id": f"{timeline}:{int(start):06d}-{int(end):06d}", "timeline": timeline, "video_path": manifest["video_path"], "start_sec": round(start, 3), "end_sec": round(end, 3), "caption": None})
+        video_ids = [segment["video_id"] for segment in manifest["segments"] if min(end, float(segment["end"])) > max(start, float(segment["start"]))]
+        rows.append({"window_id": f"{timeline}:{int(start):06d}-{int(end):06d}", "timeline": timeline, "video_ids": video_ids, "video_path": manifest["video_path"], "start_sec": round(start, 3), "end_sec": round(end, 3), "caption": None})
         if end >= duration:
             break
         start += stride_seconds
@@ -57,8 +58,7 @@ def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int =
     timeline = f"{fold}-{timeline_index:03d}"
     path = ROOT / "evaluations" / fold / "caption_index" / f"{timeline}-windows.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
-    if limit:
-        rows = rows[:limit]
+    work_rows = rows[:limit] if limit else rows
     keys = [x.strip() for x in (os.getenv("GEMINI_API_KEYS") or os.getenv("GOOGLE_API_KEYS") or "").split(",") if x.strip()]
     for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "google_api_key_0"):
         if os.getenv(name) and os.getenv(name) not in keys:
@@ -68,7 +68,7 @@ def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int =
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     key_index = 0
     with tempfile.TemporaryDirectory() as tmp:
-        for i, row in enumerate(rows):
+        for i, row in enumerate(work_rows):
             if row.get("caption"):
                 continue
             clip = Path(tmp) / f"window-{i}.mp4"
@@ -89,7 +89,7 @@ def caption_windows(fold: str = "holdout", timeline_index: int = 0, limit: int =
             row["caption"] = "".join(p.get("text", "") for p in response.json().get("candidates", [{}])[0].get("content", {}).get("parts", []))
             path.write_text("\n".join(json.dumps(x) for x in rows) + "\n")
             volume.commit()
-    return {"fold": fold, "timeline": timeline, "captioned": sum(bool(x.get("caption")) for x in rows), "windows": len(rows), "path": str(path), "kilometer_validation_used": False}
+    return {"fold": fold, "timeline": timeline, "captioned": sum(bool(x.get("caption")) for x in rows), "windows": len(rows), "processed": len(work_rows), "path": str(path), "kilometer_validation_used": False}
 
 
 @app.local_entrypoint()
