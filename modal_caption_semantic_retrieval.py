@@ -21,12 +21,16 @@ def evaluate(fold: str = "holdout", timeline_index: int = 0, top_k: int = 5) -> 
     timeline = f"{fold}-{timeline_index:03d}"
     captions = [json.loads(x) for x in (ROOT / "evaluations" / fold / "caption_index" / f"{timeline}-windows.jsonl").read_text().splitlines()]
     captions = [x for x in captions if x.get("local_caption")]
+    transcript_path = ROOT / "evaluations" / fold / "caption_index" / f"{timeline}-transcript.json"
+    transcript = json.loads(transcript_path.read_text()).get("segments", []) if transcript_path.exists() else []
+    for row in captions:
+        row["audio_text"] = " ".join(segment["text"] for segment in transcript if min(row["end_sec"], segment["end_sec"]) > max(row["start_sec"], segment["start_sec"]))
     manifest = json.loads((ROOT / "materialized" / fold / f"{timeline}.json").read_text())
     for row in captions:
         row.setdefault("video_ids", [s["video_id"] for s in manifest["segments"] if min(row["end_sec"], float(s["end"])) > max(row["start_sec"], float(s["start"]))])
     queries = [json.loads(x) for x in (ROOT / "virtual" / fold / "queries.jsonl").read_text().splitlines() if json.loads(x).get("timeline_id") == timeline]
     model = SentenceTransformer(MODEL)
-    doc_text = [x["local_caption"] for x in captions]
+    doc_text = [x["local_caption"] + " " + x.get("audio_text", "") for x in captions]
     doc_emb = model.encode(doc_text, normalize_embeddings=True, convert_to_tensor=True)
     results = []
     hits = 0

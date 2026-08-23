@@ -44,7 +44,9 @@ The correct global experiment is now implemented in
 `Qwen3-VL-8B-Instruct` captioned all 54 holdout-000 windows (30-second windows,
 20-second stride) on the migrated A10G Volume. BM25 reached only 19/211 (9.0%)
 source recall at top-5; MiniLM semantic retrieval improved this only to 28/211
-(13.3%). Both local-caption candidates are rejected. This does not invalidate
+(13.3%). Adding a CPU Whisper tiny transcript (only 2 speech segments in this
+mostly non-speech timeline) did not change the 28/211 result. All local-caption
+candidates are rejected. This does not invalidate
 the public caption-index lead: the competitor likely uses stronger audio-aware
 Gemini captions and semantic retrieval. Gemini caption filling remains
 quota-blocked. Keep the current Gemini evidence-card candidate frozen; do not
