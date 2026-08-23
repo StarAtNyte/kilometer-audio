@@ -30,7 +30,13 @@ the retrieved text. Wind_Rain_Tower's method is not disclosed.
 
 ## Next experiment priority
 
-Implement a caption-index ablation on authorized dev/holdout first. Keep the
-current Gemini evidence-card candidate frozen; do not use hidden test labels or
-infer competitor answers. Promote only a caption-index candidate that beats the
-70% authorized holdout Gemini score and passes the existing artifact audit.
+A first caption-index ablation was implemented in
+`modal_gemini_caption_probe.py`: Gemini captions the retrieved evidence clip,
+then a second Gemini call answers from the caption. On holdout-000 it scored
+5/8 (62.5%), below the direct evidence-card Gemini baseline of 7/8 (87.5%).
+The generic caption variant is rejected. A question-guided caption variant was
+started but hit Gemini HTTP 429 quota after the first run; it has no measured
+result. Keep the current Gemini evidence-card candidate frozen; do not use
+hidden test labels or infer competitor answers. A caption index remains worth
+revisiting only with full-video/window coverage rather than captions of already
+retrieved clips.
