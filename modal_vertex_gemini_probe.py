@@ -22,7 +22,7 @@ def render_card(source: Path, intervals: list[list[float]], output: Path) -> Non
     clips = []
     for index, (start, end) in enumerate(intervals[:5]):
         clip = output.parent / f"part-{index}.mp4"
-        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start), "-to", str(end), "-i", str(source), "-an", "-vf", "fps=0.5,scale=320:-2", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", str(clip)], check=True, timeout=240)
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(start), "-to", str(end), "-i", str(source), "-vf", "fps=0.5,scale=320:-2", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-pix_fmt", "yuv420p", "-y", str(clip)], check=True, timeout=240)
         clips.append(clip)
     manifest = output.parent / "concat.txt"
     manifest.write_text("\n".join(f"file '{clip}'" for clip in clips) + "\n")

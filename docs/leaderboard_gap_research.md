@@ -46,7 +46,7 @@ profile-local `gcp-vertex-service-account` secret and inline video bytes. A
 bounded Gemini 3.5 Vertex call succeeded at 1/1 on holdout-000. Larger runs
 encountered Vertex 429/504 service quota/deadline responses while another API
 workload was active; the probe now uses configurable cooldowns, retries, and
-partial-result checkpoints. With the corrected Vertex thinking configuration, Gemini 3.7 Flash grounded direct-video scoring was 26/40 (65.0%) across holdout-000 through holdout-004: 7/8, 4/8, 5/8, 5/8, and 5/8. This is below the existing Gemini 3.6 result of 28/40 (70.0%). A disagreement adjudication pass was attempted but hit Vertex 429 quota exhaustion; no Vertex candidate has been promoted or submitted.
+partial-result checkpoints. With the corrected Vertex thinking configuration, Gemini 3.7 Flash grounded direct-video scoring was 26/40 (65.0%) across holdout-000 through holdout-004: 7/8, 4/8, 5/8, 5/8, and 5/8. This is below the existing Gemini 3.6 result of 28/40 (70.0%), but the initial Vertex comparison was not audio-equivalent: the Vertex renderer used `-an` while the Gemini 3.6 baseline preserved audio. The Vertex probe and adjudicator now preserve AAC audio; they must be rerun before drawing a model-quality conclusion. A disagreement adjudication pass was attempted but hit Vertex 429 quota exhaustion; no Vertex candidate has been promoted or submitted.
 The generic caption variant is rejected. A question-guided caption variant was
 started but hit Gemini HTTP 429 quota after the first run; it has no measured
 result.
