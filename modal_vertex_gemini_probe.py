@@ -80,7 +80,7 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8, model:
                 if cooldown_sec:
                     time.sleep(cooldown_sec if attempt == 0 else min(60.0, cooldown_sec * (2 ** attempt)))
                 try:
-                    response = client.models.generate_content(model=model, contents=[types.Content(role="user", parts=[part, types.Part.from_text(text=prompt)])], config=types.GenerateContentConfig(temperature=0, max_output_tokens=256, thinking_config=types.ThinkingConfig(thinking_level="high")))
+                    response = client.models.generate_content(model=model, contents=[types.Content(role="user", parts=[part, types.Part.from_text(text=prompt)])], config=types.GenerateContentConfig(temperature=0, max_output_tokens=2048, thinking_config=types.ThinkingConfig(thinking_level="high")))
                     break
                 except Exception as exc:
                     message = str(exc)
