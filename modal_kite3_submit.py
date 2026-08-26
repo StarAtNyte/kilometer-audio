@@ -100,6 +100,17 @@ def duration_of(path: Path) -> float:
     )
 
 
+def full_timeline_proxy_args(source: Path, partial: Path) -> list[str]:
+    """Build a timestamp-preserving, audio-preserving proxy command."""
+    return [
+        "ffmpeg", "-y", "-threads", "0", "-i", str(source), "-vf",
+        ("fps=0.2,scale=640:360:force_original_aspect_ratio=decrease,"
+         "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1"), "-c:v", "libx264",
+        "-preset", "ultrafast", "-crf", "30", "-c:a", "aac", "-b:a", "64k",
+        "-movflags", "+faststart", str(partial),
+    ]
+
+
 @app.function(
     image=gpu_image,
     gpu="A100-80GB",
@@ -119,7 +130,10 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
     questions = json.loads((TRACK_ROOT / "manifests" / f"{split}_questions.json").read_text())
     cache = TRACK_ROOT / "models" / "huggingface"
 
-    proxy_dir = TRACK_ROOT / "proxies" / f"{split}-1fps"
+    # Preserve original timestamps. The previous 24-frame concat proxy
+    # compressed hour-long recordings into ~120 seconds while SigLIP times
+    # remained in source-video seconds, making late evidence intervals invalid.
+    proxy_dir = TRACK_ROOT / "proxies" / f"{split}-full-timeline"
     proxy_dir.mkdir(parents=True, exist_ok=True)
     print(f"[kite3] start split={split} questions={len(questions)}", flush=True)
     unique_videos = sorted({video_id(payload) for payload in questions.values()})
@@ -139,28 +153,9 @@ def generate_validation(split: str = "validation") -> dict[str, Any]:
         source = SHARED_VIDEO_ROOT / vid / f"{vid}.mkv"
         proxy = proxy_by_video[vid]
         partial = proxy.with_name(proxy.stem + ".partial.mp4")
-        frame_dir = TRACK_ROOT / "frames" / vid / "uniform-5s"
-        frame_files = sorted(frame_dir.glob("*.jpg")) if frame_dir.exists() else []
-        if frame_files:
-            # Use a compact 24-frame proxy; avoid expensive Volume image reads.
-            stride = max(1, len(frame_files) // 24)
-            selected_frames = frame_files[::stride][:24]
-            concat_list = Path("/tmp") / f"kite3-{vid}-frames.txt"
-            concat_list.write_text("".join(f"file '{p}'\nduration 5\n" for p in selected_frames))
-            ffmpeg_args = [
-                "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list), "-an", "-vf",
-                "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial),
-            ]
-        else:
-            ffmpeg_args = [
-                "ffmpeg", "-y", "-threads", "0", "-i", str(source), "-an", "-vf",
-                ("fps=1,scale=640:360:force_original_aspect_ratio=decrease,"
-                 "pad=640:360:(ow-iw)/2:(oh-ih)/2,setsar=1"), "-c:v", "libx264",
-                "-preset", "ultrafast", "-crf", "30", "-movflags", "+faststart", str(partial),
-            ]
+        ffmpeg_args = full_timeline_proxy_args(source, partial)
         conversion = subprocess.run(
-            ffmpeg_args, check=False, capture_output=True, text=True, timeout=300,
+            ffmpeg_args, check=False, capture_output=True, text=True, timeout=1200,
         )
         if conversion.returncode or not partial.exists() or partial.stat().st_size == 0:
             partial.unlink(missing_ok=True)

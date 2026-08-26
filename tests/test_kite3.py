@@ -1,6 +1,8 @@
+from pathlib import Path
+
 from modal_kite3 import group_video_ids, stable_order
 from modal_kite3_router import query_document, stable_fold
-from modal_kite3_submit import parse_spans
+from modal_kite3_submit import full_timeline_proxy_args, parse_spans
 from modal_kite3_visual import route_to_audio
 from modal_kite4_omni import parse_letter
 from modal_timelens2 import merge_intervals, overlaps, parse_answer_id, parse_intervals
@@ -65,6 +67,13 @@ def test_verifier_answer_parser_is_constrained() -> None:
 
 def test_submission_span_parser_expands_and_clamps() -> None:
     assert parse_spans("[[2, 5], [98, 105]]", 100) == [[0.0, 9.0], [94.0, 100]]
+
+
+def test_proxy_command_preserves_timeline_and_audio() -> None:
+    command = full_timeline_proxy_args(Path("source.mkv"), Path("proxy.partial.mp4"))
+    assert "fps=0.2" in command[command.index("-vf") + 1]
+    assert command[command.index("-c:a") + 1] == "aac"
+    assert "-an" not in command
 
 
 def test_omni_answer_parser_requires_a_valid_letter() -> None:

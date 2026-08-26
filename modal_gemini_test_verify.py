@@ -15,7 +15,7 @@ import modal
 from kite_core import SHARED_VIDEO_ROOT, TRACK_ROOT, atomic_write_json, build_submission
 
 VOLUME_NAME = "perception-test-2026-data"
-UNUSABLE_VIDEOS = {"yzDPjzyl-ek", "idx41AgnL6U", "oj_G_Dc9RBM", "V_Yl5Fwujqs", "n2o2EzjaBfE", "V-43u9V8k0s"}
+UNUSABLE_VIDEOS: set[str] = set()
 app = modal.App("kilometer-audio-gemini-test-verify")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
 image = (
@@ -77,15 +77,27 @@ def answer_one(question_id: str, model: str = "gemini-3.6-flash") -> dict[str, A
     volume.reload()
     cell_path = CELLS_DIR / f"{question_id}.json"
     if cell_path.exists():
-        return json.loads(cell_path.read_text())
+        cached = json.loads(cell_path.read_text())
+        # A missing source is transient while the cross-workspace media repair is
+        # running.  Do not let that fallback become a permanent checkpoint.
+        if cached.get("fallback_reason") != "unusable_media":
+            return cached
 
     questions = json.loads((TRACK_ROOT / "manifests" / "test_questions.json").read_text())
     evidence = json.loads((TRACK_ROOT / "predictions" / "test" / "kite7_rrf_evidence.json").read_text())
     fallback = json.loads((TRACK_ROOT / "predictions" / "test" / "audio_rag_submission.json").read_text())
     payload = questions[question_id]
     row = evidence[question_id]
+    if not row.get("intervals"):
+        recovery_path = TRACK_ROOT / "predictions" / "test" / "kite8_gemini_recovery_evidence.json"
+        recovery = json.loads(recovery_path.read_text()).get("recovery", {})
+        if question_id in recovery:
+            row = {**row, "intervals": recovery[question_id]["intervals"]}
     video_id = row["video_id"]
     source = SHARED_VIDEO_ROOT / video_id / f"{video_id}.mkv"
+
+    if cell_path.exists() and (video_id in UNUSABLE_VIDEOS or not source.exists()):
+        return cached
 
     def write(record: dict[str, Any]) -> dict[str, Any]:
         atomic_write_json(cell_path, record)
@@ -172,6 +184,27 @@ def purge_errors() -> dict[str, Any]:
     return {"removed": len(removed)}
 
 
+@app.function(image=image, volumes={"/data": volume}, timeout=5 * 60)
+def bootstrap_cells() -> dict[str, Any]:
+    """Recover resumable cells from a prior aggregate-only run."""
+    volume.reload()
+    aggregate_path = TRACK_ROOT / "predictions" / "test" / "kite8_gemini_evidence.json"
+    records = json.loads(aggregate_path.read_text())
+    restored = 0
+    skipped_transient = 0
+    for question_id, record in records.items():
+        if record.get("fallback_reason") in {"unusable_media", "gemini_error", "unparsed_response"}:
+            skipped_transient += 1
+            continue
+        cell_path = CELLS_DIR / f"{question_id}.json"
+        if not cell_path.exists():
+            atomic_write_json(cell_path, record)
+            restored += 1
+    volume.commit()
+    return {"records": len(records), "restored": restored,
+            "skipped_transient": skipped_transient}
+
+
 @app.function(image=image, volumes={"/data": volume}, timeout=60)
 def question_ids() -> list[str]:
     volume.reload()
@@ -226,5 +259,7 @@ def main(action: str = "run", model: str = "gemini-3.6-flash", limit: int = 0) -
         print(json.dumps(aggregate.remote(), indent=2))
     elif action == "purge_errors":
         print(json.dumps(purge_errors.remote(), indent=2))
+    elif action == "bootstrap_cells":
+        print(json.dumps(bootstrap_cells.remote(), indent=2))
     else:
         raise ValueError(f"Unknown action: {action}")

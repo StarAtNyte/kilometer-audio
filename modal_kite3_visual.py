@@ -63,6 +63,20 @@ def route_to_audio(question: str) -> bool:
     )
 
 
+def discriminative_option_texts(question: str, options: list[str]) -> list[str]:
+    """Make one retrieval query per option using terms unique across options."""
+    tokenized = [re.findall(r"[a-z0-9]+", option.lower()) for option in options]
+    frequencies = defaultdict(int)
+    for tokens in tokenized:
+        for token in set(tokens):
+            frequencies[token] += 1
+    queries = []
+    for option, tokens in zip(options, tokenized, strict=True):
+        unique = [token for token in tokens if frequencies[token] == 1]
+        queries.append(question + " " + (" ".join(unique) if unique else option))
+    return queries
+
+
 @app.function(
     image=image,
     gpu=os.getenv("KITE_INDEX_GPU", "L4"),
@@ -162,7 +176,9 @@ def build_visual_lattice(fold: str = "dev", hop_seconds: float = 2.0) -> dict[st
     memory=32768,
     timeout=2 * 60 * 60,
 )
-def evaluate_visual_retrieval(fold: str = "dev") -> dict[str, Any]:
+def evaluate_visual_retrieval(
+    fold: str = "dev", variant_policy: str = "question-options", output_tag: str = "siglip2"
+) -> dict[str, Any]:
     import numpy as np
     import torch
     from transformers import AutoModel, AutoProcessor
@@ -180,9 +196,11 @@ def evaluate_visual_retrieval(fold: str = "dev") -> dict[str, Any]:
     lattice = ROOT / "lattice" / "siglip2" / fold
     processor = AutoProcessor.from_pretrained(MODEL_NAME)
     model = AutoModel.from_pretrained(MODEL_NAME).to("cuda").eval()
+    if variant_policy not in {"question-options", "discriminative"}:
+        raise ValueError("variant_policy must be question-options or discriminative")
     metrics = {
-        strategy: {"count": 0.0, "r1": 0.0, "r5": 0.0, "r10": 0.0, "mrr": 0.0}
-        for strategy in ("question", "option_max")
+        strategy: {"count": 0.0, "r1": 0.0, "r10": 0.0, "r5": 0.0, "mrr": 0.0}
+        for strategy in ("question", "option_max", "option_mean", "question_option_max", "question_option_mean")
     }
     results: list[dict[str, Any]] = []
     for timeline in timelines:
@@ -200,10 +218,14 @@ def evaluate_visual_retrieval(fold: str = "dev") -> dict[str, Any]:
             )
         image_features = np.concatenate(matrices, axis=0)
         timeline_queries = by_timeline[timeline["timeline_id"]]
-        variants = [
-            [query["query"]] + [query["query"] + " " + option for option in query["options"]]
-            for query in timeline_queries
-        ]
+        variants = []
+        for query in timeline_queries:
+            option_queries = (
+                discriminative_option_texts(query["query"], query["options"])
+                if variant_policy == "discriminative"
+                else [query["query"] + " " + option for option in query["options"]]
+            )
+            variants.append([query["query"]] + option_queries)
         texts = [text for group in variants for text in group]
         text_features: list[np.ndarray] = []
         for start in range(0, len(texts), 128):
@@ -221,9 +243,16 @@ def evaluate_visual_retrieval(fold: str = "dev") -> dict[str, Any]:
         for query, query_variants in zip(timeline_queries, variants, strict=True):
             features = np.stack(text_features[offset : offset + len(query_variants)])
             offset += len(query_variants)
+            option_scores = image_features @ features[1:].T
+            question_scores = image_features @ features[0]
+            option_max = np.max(option_scores, axis=1)
+            option_mean = np.mean(option_scores, axis=1)
             scores = {
-                "question": image_features @ features[0],
-                "option_max": np.max(image_features @ features[1:].T, axis=1),
+                "question": question_scores,
+                "option_max": option_max,
+                "option_mean": option_mean,
+                "question_option_max": (question_scores + option_max) / 2,
+                "question_option_mean": (question_scores + option_mean) / 2,
             }
             relevant = {span["video_id"] for span in query["relevant_spans"]}
             row_result: dict[str, Any] = {"query_id": query["query_id"], "strategies": {}}
@@ -246,13 +275,15 @@ def evaluate_visual_retrieval(fold: str = "dev") -> dict[str, Any]:
             bucket[name] /= count
         bucket["count"] = int(count)
     output = ROOT / "evaluations" / fold
-    atomic_write_json(output / "siglip2_retrieval_metrics.json", metrics)
-    jsonl_write(output / "siglip2_retrieval_results.jsonl", results)
+    atomic_write_json(output / f"{output_tag}_retrieval_metrics.json", metrics)
+    jsonl_write(output / f"{output_tag}_retrieval_results.jsonl", results)
     volume.commit()
     return {
         "fold": fold,
         "metrics": metrics,
         "query_count": len(results),
+        "variant_policy": variant_policy,
+        "output_tag": output_tag,
         "kilometer_validation_used": False,
     }
 
@@ -442,6 +473,8 @@ def main(action: str = "build", fold: str = "dev", timeline: int = 0) -> None:
         print(json.dumps(build_visual_lattice.remote(fold), indent=2))
     elif action == "evaluate":
         print(json.dumps(evaluate_visual_retrieval.remote(fold), indent=2))
+    elif action == "evaluate-discriminative":
+        print(json.dumps(evaluate_visual_retrieval.remote(fold, "discriminative", "siglip2-discriminative"), indent=2))
     elif action == "union":
         print(json.dumps(evaluate_union.remote(fold), indent=2))
     elif action == "answer-score":

@@ -62,10 +62,15 @@ modal run modal_pipeline.py --action download-split --split test
 modal run modal_pipeline.py --action run-split --split test
 modal run modal_visual.py --action index-split --split test
 modal run modal_kite3_submit.py --split test
-modal run modal_kite4_omni.py --split test
+modal run modal_kite4_omni.py --split test --include-recovered --policy rrf
 ```
 
 The final artifact is `/data/2706-kilometer-audio/predictions/test/kite4_omni_submission.json`.
+
+`--include-recovered` is required after the full-timeline KITE-3 proxy rebuild:
+the six videos previously classified as unusable are now available with
+timestamp-aligned original media and should be processed rather than replaced
+by the uniform fallback.
 
 Do not substitute validation labels or manually selected answers into the test pipeline.
 

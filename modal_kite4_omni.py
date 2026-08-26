@@ -64,6 +64,14 @@ def source_duration(source: Path) -> float:
     return float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(source)], text=True).strip())
 
 
+def source_has_audio(source: Path) -> bool:
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=index", "-of", "csv=p=0", str(source)],
+        check=False, capture_output=True, text=True,
+    )
+    return bool(result.stdout.strip())
+
+
 def needs_temporal_resolution(question: str) -> bool:
     text = question.lower()
     markers = ("how many", "how often", "how long", "first", "last", "before", "after", "between", "order", "sequence", "times")
@@ -77,6 +85,7 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
         for start, end in intervals
         for item in ("-ss", str(start), "-t", str(max(0.1, end - start)), "-i", str(source))
     ]
+    has_audio = source_has_audio(source)
     filters = []
     for index in range(len(intervals)):
         filters.append(
@@ -84,9 +93,14 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
             "force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2,"
             f"setsar=1[v{index}]"
         )
-        filters.append(f"[{index}:a]asetpts=PTS-STARTPTS,aresample=16000[a{index}]")
-    joined = "".join(f"[v{i}][a{i}]" for i in range(len(intervals)))
-    graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=1[outv][outa]"
+        if has_audio:
+            filters.append(f"[{index}:a]asetpts=PTS-STARTPTS,aresample=16000[a{index}]")
+    if has_audio:
+        joined = "".join(f"[v{i}][a{i}]" for i in range(len(intervals)))
+        graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=1[outv][outa]"
+    else:
+        joined = "".join(f"[v{i}]" for i in range(len(intervals)))
+        graph = ";".join(filters) + f";{joined}concat=n={len(intervals)}:v=1:a=0[outv]"
     result = subprocess.run(
         [
             "ffmpeg",
@@ -96,8 +110,7 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
             graph,
             "-map",
             "[outv]",
-            "-map",
-            "[outa]",
+            *(["-map", "[outa]"] if has_audio else []),
             "-threads",
             "0",
             "-c:v",
@@ -106,10 +119,7 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
             "ultrafast",
             "-crf",
             "30",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "96k",
+            *(["-c:a", "aac", "-b:a", "96k"] if has_audio else []),
             str(partial),
         ],
         check=False,
@@ -131,7 +141,9 @@ def render_av_card(source: Path, intervals: list[list[float]], output: Path, vid
     timeout=8 * 60 * 60,
 )
 def generate_validation(
-    split: str = "validation", policy: str = "baseline"
+    split: str = "validation", policy: str = "baseline",
+    include_recovered: bool = False, only_video_ids: str = "",
+    visual_sweep: bool = False
 ) -> dict[str, Any]:
     import torch
     from qwen_omni_utils import process_mm_info
@@ -184,15 +196,24 @@ def generate_validation(
     selected: dict[str, int] = {
         question_id: int(row["answer_id"]) for question_id, row in records.items()
     }
+    target_videos = {item.strip() for item in only_video_ids.split(",") if item.strip()}
+    if target_videos:
+        selected = {
+            question_id: int(fallback[question_id]["answer_id"])
+            for question_id, payload in questions.items()
+            if evidence[question_id]["video_id"] not in target_videos
+        }
     print(f"[kite4] questions={len(questions)} cached={len(selected)}; model loaded", flush=True)
     started = time.monotonic()
     for index, (question_id, payload) in enumerate(questions.items()):
         if question_id in selected:
             continue
         row = evidence[question_id]
+        if target_videos and row["video_id"] not in target_videos:
+            continue
         print(f"[kite4] question {index + 1}/{len(questions)} id={question_id}", flush=True)
         source = SHARED_VIDEO_ROOT / row["video_id"] / f"{row['video_id']}.mkv"
-        if row["video_id"] in UNUSABLE_VIDEOS or not source.exists():
+        if (row["video_id"] in UNUSABLE_VIDEOS and not include_recovered) or not source.exists():
             answer_id = int(fallback[question_id]["answer_id"])
             selected[question_id] = answer_id
             records[question_id] = {"answer_id": answer_id, "fallback": True, "fallback_reason": "unusable_media", "video_id": row["video_id"], "source": "audio_rag_submission"}
@@ -252,6 +273,14 @@ def generate_validation(
             intervals = [[start, end] for start, end in intervals if end > start]
         if not intervals:
             intervals = [[0.0, min(duration, 10.0)]]
+        if visual_sweep and not source_has_audio(source):
+            window = min(20.0, duration)
+            centers = [duration * fraction for fraction in (0.05, 0.35, 0.65, 0.95)]
+            intervals = [
+                [max(0.0, min(duration - window, center - window / 2.0)),
+                 max(0.1, min(duration, center + window / 2.0))]
+                for center in centers
+            ]
         evidence_fps = 2 if needs_temporal_resolution(payload["question"]) else 1
         try:
             render_av_card(source, intervals, card, evidence_fps)
@@ -294,15 +323,17 @@ def generate_validation(
             if image_render.returncode == 0 and image_path.exists():
                 image_paths.append(image_path)
         audio_path = Path("/tmp") / f"kite4-{index}.wav"
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000",
-                str(audio_path),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=180,
-        )
+        has_audio = source_has_audio(source)
+        if has_audio:
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", str(card), "-vn", "-ac", "1", "-ar", "16000",
+                    str(audio_path),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=180,
+            )
         options = "\n".join(
             f"{chr(ord('A') + option_id)}. {option}"
             for option_id, option in enumerate(payload["options"])
@@ -318,7 +349,7 @@ def generate_validation(
                 "role": "user",
                 "content": [
                     *[{"type": "image", "image": path.resolve().as_uri()} for path in image_paths],
-                    {"type": "audio", "audio": audio_path.resolve().as_uri()},
+                    *([{"type": "audio", "audio": audio_path.resolve().as_uri()}] if has_audio else []),
                     {"type": "text", "text": prompt},
                 ],
             }
@@ -326,7 +357,7 @@ def generate_validation(
         chat = processor.apply_chat_template(
             conversation, add_generation_prompt=True, tokenize=False
         )
-        audios, images, videos = process_mm_info(conversation, use_audio_in_video=True)
+        audios, images, videos = process_mm_info(conversation, use_audio_in_video=has_audio)
         inputs = processor(
             text=chat,
             audio=audios,
@@ -334,7 +365,7 @@ def generate_validation(
             videos=videos,
             return_tensors="pt",
             padding=True,
-            use_audio_in_video=True,
+            use_audio_in_video=has_audio,
         )
         inputs = inputs.to(model.device).to(model.dtype)
         with torch.inference_mode():
@@ -343,7 +374,7 @@ def generate_validation(
                 return_audio=False,
                 thinker_return_dict_in_generate=True,
                 output_scores=True,
-                use_audio_in_video=True,
+                use_audio_in_video=has_audio,
                 max_new_tokens=1,
                 do_sample=False,
             )
@@ -393,5 +424,12 @@ def generate_validation(
 
 
 @app.local_entrypoint()
-def main(split: str = "validation", policy: str = "baseline") -> None:
-    print(json.dumps(generate_validation.remote(split, policy), indent=2))
+def main(
+    split: str = "validation", policy: str = "baseline",
+    include_recovered: bool = False, only_video_ids: str = "",
+    visual_sweep: bool = False
+) -> None:
+    print(json.dumps(
+        generate_validation.remote(split, policy, include_recovered, only_video_ids, visual_sweep),
+        indent=2,
+    ))

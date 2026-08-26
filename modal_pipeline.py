@@ -199,15 +199,7 @@ def split_video_jobs(split: str) -> list[dict[str, str]]:
     return list(jobs.values())
 
 
-@app.function(
-    image=base_image,
-    secrets=[
-        modal.Secret.from_name("youtube-cookies"),
-        modal.Secret.from_name("youtube-proxy"),
-    ],
-    volumes={"/data": volume},
-    timeout=6 * 60 * 60,
-)
+@app.function(image=base_image, volumes={"/data": volume}, secrets=[modal.Secret.from_name("youtube-cookies")], timeout=6 * 60 * 60)
 def download_video(video_id: str, url: str, split: str = "validation") -> dict[str, Any]:
     if split not in {"validation", "test"}:
         raise ValueError(f"Unsupported split: {split}")
@@ -308,16 +300,7 @@ def download_video(video_id: str, url: str, split: str = "validation") -> dict[s
     return record
 
 
-@app.function(
-    image=base_image,
-    secrets=[
-        modal.Secret.from_name("youtube-cookies"),
-        modal.Secret.from_name("youtube-proxy"),
-    ],
-    volumes={"/data": volume},
-    timeout=24 * 60 * 60,
-    memory=4096,
-)
+@app.function(image=base_image, volumes={"/data": volume}, timeout=24 * 60 * 60, memory=4096)
 def download_all_test_videos() -> dict[str, Any]:
     """Durable single-container downloader for the union of Audio and Vision test videos."""
     volume.reload()

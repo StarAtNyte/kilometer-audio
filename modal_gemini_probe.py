@@ -23,7 +23,6 @@ image = (
 )
 secret = modal.Secret.from_name("gemini-api-key")
 secret_pool = modal.Secret.from_name("gemini-api-keys")
-secret_rotation = modal.Secret.from_name("gemini-rotation-keys")
 
 
 def parse_digit(text: str) -> int | None:
@@ -52,7 +51,7 @@ def render_card(source: Path, intervals: list[list[float]], output: Path) -> Non
     )
 
 
-@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool, secret_rotation], timeout=60 * 60)
+@app.function(image=image, volumes={"/data": volume}, secrets=[secret, secret_pool], timeout=60 * 60)
 def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
           model: str = "gemini-2.5-flash", card_policy: str = "fused", prompt_policy: str = "strict", temperature: float = 0.0) -> dict[str, Any]:
     import requests
@@ -61,13 +60,17 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
         raise ValueError("Only authorized dev/holdout folds are allowed")
     volume.reload()
     timeline = f"{fold}-{timeline_index:03d}"
-    if card_policy not in {"fused", "routed", "clap"}:
-        raise ValueError("card_policy must be fused, routed, or clap")
+    if card_policy not in {"fused", "fused-wide", "routed", "clap", "union", "query-ledger"}:
+        raise ValueError("card_policy must be fused, fused-wide, routed, clap, union, or query-ledger")
     if prompt_policy not in {"strict", "grounded"}:
         raise ValueError("prompt_policy must be strict or grounded")
     if not 0.0 <= temperature <= 1.0:
         raise ValueError("temperature must be between 0 and 1")
-    card_tag = "fused-8" if card_policy == "fused" else f"fused-{card_policy}-8"
+    card_tag = (
+        "fused-8" if card_policy == "fused"
+        else "fused5-8" if card_policy == "fused-wide"
+        else "query-ledger-8" if card_policy == "query-ledger" else f"fused-{card_policy}-8"
+    )
     cards_path = TRACK_ROOT / "evaluations" / fold / "cards" / f"{timeline}-{card_tag}.jsonl"
     if not cards_path.exists():
         raise FileNotFoundError(f"Missing cards: {cards_path}; materialize/build them first")
@@ -107,7 +110,14 @@ def probe(fold: str = "holdout", timeline_index: int = 0, limit: int = 8,
                 "then choose only the option directly supported by the evidence. "
                 "Return exactly one digit 0, 1, 2, 3, or 4 and nothing else."
             )
-            prompt = f"{instruction}\nQuestion: {card['question']}\nOptions:\n{options}"
+            ledger = card.get("ledger_text")
+            decomposition = card.get("decomposition")
+            context = ""
+            if decomposition:
+                context += f"\nQuestion routing: {decomposition.get('route')} / {decomposition.get('mode')}"
+            if ledger:
+                context += "\nTimestamped retrieval ledger (hints only; verify against the video):\n" + ledger
+            prompt = f"{instruction}\nQuestion: {card['question']}\nOptions:\n{options}{context}"
             for retry in range(8):
                 for attempt in range(len(keys)):
                     key = keys[(key_index + attempt) % len(keys)]

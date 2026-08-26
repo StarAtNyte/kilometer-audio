@@ -357,6 +357,7 @@ def build_evidence_cards(
     limit: int = 24,
     fusion: bool = False,
     fusion_policy: str = "rrf",
+    source_k: int = 3,
 ) -> dict[str, Any]:
     if fold not in {"dev", "holdout"}:
         raise ValueError("Only authorized train-derived dev or holdout is allowed")
@@ -432,7 +433,7 @@ def build_evidence_cards(
                 for ranking in (visual_ids, audio_ids):
                     for rank, source_id in enumerate(ranking, start=1):
                         rrf[source_id] = rrf.get(source_id, 0.0) + 1.0 / (60 + rank)
-                visual_ids = sorted(rrf, key=rrf.get, reverse=True)[:3]
+                visual_ids = sorted(rrf, key=rrf.get, reverse=True)[:source_k]
         else:
             visual_ids = visual_ids[:5]
         for video_id in visual_ids:
@@ -465,9 +466,14 @@ def build_evidence_cards(
             }
         )
     output = evaluation / "cards"
-    card_tag = (
-        f"fused-{limit}" if fusion_policy == "rrf" else f"fused-{fusion_policy}-{limit}"
-    ) if fusion else str(limit)
+    if fusion and fusion_policy == "rrf" and source_k != 3:
+        card_tag = f"fused{source_k}-{limit}"
+    elif fusion:
+        card_tag = (
+            f"fused-{limit}" if fusion_policy == "rrf" else f"fused-{fusion_policy}-{limit}"
+        )
+    else:
+        card_tag = str(limit)
     jsonl_write(output / f"{timeline_id}-{card_tag}.jsonl", cards)
     summary = {
         "fold": fold,
@@ -478,7 +484,7 @@ def build_evidence_cards(
         "mean_timeline_seconds": materialized["duration"],
         "compression_ratio": total_seconds / len(cards) / materialized["duration"],
         "policy": (
-            f"up to 3 TimeLens2 intervals plus {fusion_policy} top-3 sources, merged"
+            f"up to 3 TimeLens2 intervals plus {fusion_policy} top-{source_k} sources, merged"
             if fusion
             else "up to 3 TimeLens2 intervals (+/-4s) plus SigLIP2 top-5 sources, merged"
         ),
@@ -707,7 +713,8 @@ def verify_cards(
 
 @app.local_entrypoint()
 def main(
-    action: str = "materialize", fold: str = "dev", timeline: int = 0, limit: int = 12
+    action: str = "materialize", fold: str = "dev", timeline: int = 0, limit: int = 12,
+    source_k: int = 3,
 ) -> None:
     if action == "materialize":
         print(json.dumps(materialize_timeline.remote(fold, timeline), indent=2))
@@ -722,7 +729,7 @@ def main(
     elif action == "verify-constrained":
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True), indent=2))
     elif action == "cards-fused":
-        print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True, "rrf"), indent=2))
+        print(json.dumps(build_evidence_cards.remote(fold, timeline, limit, True, "rrf", source_k), indent=2))
     elif action == "verify-fused":
         print(json.dumps(verify_cards.remote(fold, timeline, limit, False, True, False, True, "rrf"), indent=2))
     elif action == "cards-fused-clap":
