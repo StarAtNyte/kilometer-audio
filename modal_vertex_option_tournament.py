@@ -231,9 +231,53 @@ def run(shard: int = 0, shards: int = 1, cooldown_sec: float = 30.0,
     return report
 
 
+@APP.function(image=IMAGE, volumes={"/data": VOLUME}, timeout=30 * 60)
+def aggregate(output_tag: str = "kite11-tournament") -> dict[str, Any]:
+    """Build a complete candidate from any finished checkpoints."""
+    from kite_core import TRACK_ROOT, build_submission, validate_predictions
+
+    VOLUME.reload()
+    root = TRACK_ROOT
+    questions = json.loads((root / "manifests/test_questions.json").read_text())
+    fallback = json.loads((root / "predictions/test/kite8_gemini_submission.json").read_text())
+    outdir = root / "predictions/test" / output_tag
+    rows: list[dict[str, Any]] = []
+    for path in sorted(outdir.glob("shard-*.partial.json")):
+        rows.extend(json.loads(path.read_text()))
+    selected = {aid: int(fallback[aid]["answer_id"]) for aid in questions}
+    usable: list[dict[str, Any]] = []
+    for row in rows:
+        prediction = row.get("prediction")
+        if prediction is None or row.get("fallback") in {"unparsed", "vertex_error"}:
+            continue
+        selected[row["answer_id"]] = int(prediction)
+        usable.append(row)
+    submission = build_submission(questions, selected)
+    errors = validate_predictions(questions, submission)
+    if errors:
+        raise ValueError("invalid aggregate: " + "; ".join(errors))
+    output = root / "predictions/test" / f"{output_tag}-submission.json"
+    output.write_text(json.dumps(submission, indent=2) + "\n")
+    report = {
+        "method": "option-independent evidence tournament",
+        "rows_checkpointed": len(rows),
+        "rows_usable": len(usable),
+        "changed_from_baseline": sum(row["prediction"] != row["baseline"] for row in usable),
+        "questions": len(submission),
+        "baseline_filled": len(questions) - len({row["answer_id"] for row in usable}),
+        "submission": str(output),
+    }
+    output.with_name(output.stem + "-report.json").write_text(json.dumps(report, indent=2) + "\n")
+    VOLUME.commit()
+    return report
+
+
 @APP.local_entrypoint()
 def main(shard: int = 0, shards: int = 1, cooldown_sec: float = 30.0,
          action: str = "run") -> None:
-    if action != "run":
-        raise ValueError("only action=run is supported")
-    print(run.remote(shard=shard, shards=shards, cooldown_sec=cooldown_sec))
+    if action == "aggregate":
+        print(aggregate.remote())
+    elif action == "run":
+        print(run.remote(shard=shard, shards=shards, cooldown_sec=cooldown_sec))
+    else:
+        raise ValueError("action must be run or aggregate")
