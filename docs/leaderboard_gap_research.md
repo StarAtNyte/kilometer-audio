@@ -526,3 +526,20 @@ holdout-000. Per-question majority vote scored only **6/8**, below the strict
 all-interval candidate at **7/8**; it was wrong on one of the disputed
 questions despite strong majority agreement. No cached-vote override is
 promoted.
+# KITE-9 private result — 2026-08-26
+
+The corrected option-only retrieval candidate was submitted privately to test
+phase 5352 as EvalAI run `580780` and received official Top-1 `0.508`.
+
+Configuration:
+
+- independent answer-option retrieval with SigLIP and CLAP;
+- beam 2, all retained retrieved intervals, exact timestamps;
+- 320-pixel, 0.5-FPS grounded clips with AAC audio preserved;
+- Gemini 3.6 Flash, high thinking, temperature 0, output cap 2048;
+- 500-question schema-valid submission, with base answers retained where a
+  transient media/API retry remained unresolved.
+
+This exceeds the previous public StarAtNyte result (`0.468`), the visible
+leader (`0.496`), and the campaign target (`0.500`). The run was private and
+therefore does not change the public leaderboard.

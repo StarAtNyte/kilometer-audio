@@ -33,16 +33,16 @@ KilometerAudio labels may be used for tuning.
 | 579586 | 2026-08-20 09:39 | private | finished | **0.452** | KITE-8 Gemini-3.6-flash, all rate-limited cells cleared; 488/500 real answers, 12/500 fallback (all unusable-media, non-retriable ceiling) |
 | 579758 | 2026-08-22 00:21 | public | finished | 0.494 | amanupg; 3.5-flash over caption index |
 | 580012 | 2026-08-23 11:20 | public | finished | **0.496** | Wind_Rain_Tower; current public leader |
+| 580780 | 2026-08-26 | private | finished | **0.508** | KITE-9 option-only beam-2 retrieval with Gemini 3.6 Flash; 500-question schema-valid candidate; three unresolved media retries retained base answers |
 
 The phase API previously listed 6 submissions, leaving 24 of the 30 total
 allowance. Run 579337 is the seventh campaign submission; the maximum of two
 submissions per UTC day remains respected. On 2026-08-17 UTC, two submissions
 were used. Private runs are diagnostic and are not leaderboard-eligible.
-17 of 30 total submissions used as of run 579586 (8 validation + 9 test); two
+18 of 30 total submissions used as of run 580780 (8 validation + 10 test); two
 submissions used on 2026-08-20 UTC, at the daily cap. The current public
 leaderboard is 580012 at 0.496, followed by 579758 at 0.494; our private best
-is 0.452, requiring at least 24 additional correct answers to reach 0.500 on
-500 questions.
+is now 580780 at 0.508, exceeding the public leader and the 0.500 target.
 
 ## Preserved artifacts
 
