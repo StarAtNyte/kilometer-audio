@@ -30,7 +30,7 @@ APP = modal.App("kilometer-audio-option-tournament")
 
 
 def _digit(value: Any) -> int | None:
-    text = str(value or "")
+    text = str(value if value is not None else "")
     match = re.search(r"(?:final|answer|option|index)\D*([0-4])", text, re.I)
     if match:
         return int(match.group(1))
