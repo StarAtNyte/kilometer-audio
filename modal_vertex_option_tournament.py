@@ -38,6 +38,23 @@ def _digit(value: Any) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _parse_model_option(raw: str) -> tuple[int | None, dict[str, Any] | None]:
+    """Accept strict JSON, JSON embedded in prose, or a labeled final digit."""
+    text = raw or ""
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and _digit(value.get("option")) is not None:
+            return _digit(value.get("option")), value
+    labeled = re.findall(r"(?:final answer|answer|option|choice|index)\s*[:#-]?\s*([0-4])", text, re.I)
+    return (int(labeled[-1]), None) if labeled else (None, None)
+
+
 def _duration(path: Path) -> float:
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -120,7 +137,11 @@ def run(shard: int = 0, shards: int = 1, cooldown_sec: float = 30.0,
     outdir.mkdir(parents=True, exist_ok=True)
     partial = outdir / f"shard-{shard}.partial.json"
     rows = json.loads(partial.read_text()) if partial.exists() else []
-    done = {row["answer_id"] for row in rows if row.get("prediction") is not None}
+    done = {
+        row["answer_id"] for row in rows
+        if row.get("prediction") is not None
+        and row.get("fallback") not in {"unparsed", "vertex_error"}
+    }
 
     import os
     creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
@@ -170,9 +191,9 @@ def run(shard: int = 0, shards: int = 1, cooldown_sec: float = 30.0,
                     raw = getattr(response, "text", "") or ""
                     try:
                         parsed = json.loads(raw)
-                        prediction = _digit(parsed.get("option"))
+                        prediction, parsed = _parse_model_option(raw)
                     except json.JSONDecodeError:
-                        prediction = _digit(raw)
+                        prediction, parsed = _parse_model_option(raw)
                     record.update({"prediction": prediction, "raw": raw,
                                    "intervals": item["intervals"]})
                     if prediction is None:
