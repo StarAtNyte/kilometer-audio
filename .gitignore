@@ -22,3 +22,8 @@ models/
 
 # pi runtime artifacts
 .pi-subagents/
+
+# Python packaging artifacts
+build/
+dist/
+*.egg-info/

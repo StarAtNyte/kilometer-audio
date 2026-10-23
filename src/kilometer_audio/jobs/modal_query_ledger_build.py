@@ -9,12 +9,12 @@ from typing import Any
 
 import modal
 
-from kite_core import compile_question, jsonl_write, route_question
+from kilometer_audio.kite_core import compile_question, jsonl_write, route_question
 
 ROOT = Path("/data/allowed-training/perception-test/kite3")
 volume = modal.Volume.from_name("perception-test-2026-data", create_if_missing=False)
 app = modal.App("kilometer-audio-query-ledger-build")
-image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kite_core")
+image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kilometer_audio")
 
 
 def tokens(text: str) -> list[str]:

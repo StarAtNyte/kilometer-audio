@@ -12,7 +12,7 @@ The MOSS adapter was **not** used by KITE-4. The MOSS result is therefore not pr
 Audit command:
 
 ```bash
-python validate_validation_artifacts.py /tmp/validation_questions.json submissions/kite4_omni_validation.json submissions/kite4_omni_evidence.json
+python -m kilometer_audio.tools.validate_validation_artifacts /tmp/validation_questions.json submissions/kite4_omni_validation.json submissions/kite4_omni_evidence.json
 ```
 
 Audit result: exact ID coverage, zero answer-pair schema errors, zero invalid intervals, and zero negative card durations. No additional test submission was made.

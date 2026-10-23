@@ -2,7 +2,7 @@
 
 ## Candidate
 
-The probe in `modal_avf_probe.py` targets NVIDIA's open-weight
+The probe in `src/kilometer_audio/jobs/modal_avf_probe.py` targets NVIDIA's open-weight
 `nvidia/nemotron-labs-audio-visual-flamingo-hf` checkpoint, which is designed
 for synchronized audio-video reasoning and temporal questions. It uses the
 released Transformers integration fork and an A100-80GB Modal function.

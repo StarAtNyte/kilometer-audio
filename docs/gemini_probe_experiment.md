@@ -2,7 +2,7 @@
 
 ## Status
 
-A private authorized-fold probe was implemented in `modal_gemini_probe.py`.
+A private authorized-fold probe was implemented in `src/kilometer_audio/jobs/modal_gemini_probe.py`.
 It reads the same fused evidence cards used by the Qwen verifier and sends short
 video cards plus the question/options to Gemini through the Modal secret
 `gemini-api-key`. It writes predictions only under the authorized
@@ -24,7 +24,7 @@ A newer `gemini-3.6-flash` probe on the same RRF cards was substantially better:
 
 The complete fixed five-timeline holdout transfer sample was evaluated after
 adding multi-key rotation (`gemini-api-keys` secret) and Retry-After-aware
-backoff to `modal_gemini_probe.py`:
+backoff to `src/kilometer_audio/jobs/modal_gemini_probe.py`:
 
 | Timeline | Parsed | Correct | Accuracy |
 |---|---:|---:|---:|

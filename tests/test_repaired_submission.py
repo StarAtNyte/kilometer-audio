@@ -1,6 +1,6 @@
 import pytest
 
-from make_repaired_submission import build_repair
+from kilometer_audio.tools.make_repaired_submission import build_repair
 
 
 def test_repair_changes_only_fallback_rows() -> None:

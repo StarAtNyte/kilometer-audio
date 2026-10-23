@@ -7,7 +7,7 @@ fixed reciprocal-rank fusion of CLAP audio retrieval and SigLIP option-condition
 visual retrieval. The fused source intervals are merged before Qwen3-VL
 constrained five-option scoring. No adapter or threshold was retrained.
 
-Implementation: `modal_timelens2.py` (`cards-fused` and `verify-fused` actions).
+Implementation: `src/kilometer_audio/jobs/modal_timelens2.py` (`cards-fused` and `verify-fused` actions).
 All media and derived artifacts remain on Modal storage.
 
 ## Authorized evaluation

@@ -7,8 +7,8 @@ blocked by persistent quota exhaustion across the full three-secret rotation
 pool. This experiment swaps to a free, self-hosted, already-cached open-weight
 model instead: `Qwen/Qwen3.5-27B` (found pre-cached on the Modal volume at
 `/data/2706-kilometer-audio/models/huggingface`, no new download). New script
-`modal_qwen_text_fallback_probe.py` uses the same constrained-digit-logit
-pattern already established in `modal_timelens2.py`/`modal_kite4_omni.py`
+`src/kilometer_audio/jobs/modal_qwen_text_fallback_probe.py` uses the same constrained-digit-logit
+pattern already established in `src/kilometer_audio/jobs/modal_timelens2.py`/`src/kilometer_audio/jobs/modal_kite4_omni.py`
 (no free-form parsing) and the same authorized calibration methodology as
 `fallback_probe_experiment.md`: `mcq_holdout.jsonl`/`mcq_dev.jsonl` first-40
 slices, question text and options only, no video/audio, no KilometerAudio

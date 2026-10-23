@@ -5,7 +5,7 @@ from pathlib import Path
 import modal
 
 VOLUME = modal.Volume.from_name("perception-test-2026-data", create_if_missing=False)
-IMAGE = modal.Image.debian_slim(python_version="3.11").apt_install("ffmpeg").pip_install("google-genai").add_local_python_source("kite_core")
+IMAGE = modal.Image.debian_slim(python_version="3.11").apt_install("ffmpeg").pip_install("google-genai").add_local_python_source("kilometer_audio")
 SECRET = modal.Secret.from_name("gcp-vertex-service-account")
 app = modal.App("kilometer-audio-vertex-test-query")
 
@@ -149,7 +149,7 @@ def progress(shard: int = 0, dense_recovery: bool = False, fallback_only: bool =
 
 @app.function(image=IMAGE, volumes={"/data":VOLUME}, timeout=30*60)
 def aggregate_recovery() -> dict:
-    from kite_core import build_submission, validate_predictions
+    from kilometer_audio.kite_core import build_submission, validate_predictions
     VOLUME.reload()
     root=Path("/data/2706-kilometer-audio")
     questions=json.loads((root/"manifests/test_questions.json").read_text())
@@ -172,7 +172,7 @@ def aggregate_recovery() -> dict:
 
 @app.function(image=IMAGE, volumes={"/data": VOLUME}, timeout=30 * 60)
 def aggregate_option_only() -> dict:
-    from kite_core import build_submission, validate_predictions
+    from kilometer_audio.kite_core import build_submission, validate_predictions
     VOLUME.reload()
     root = Path("/data/2706-kilometer-audio")
     questions = json.loads((root / "manifests/test_questions.json").read_text())

@@ -7,7 +7,7 @@ from typing import Any
 
 import modal
 
-from kite_core import atomic_write_json, jsonl_write
+from kilometer_audio.kite_core import atomic_write_json, jsonl_write
 
 VOLUME_NAME = "perception-test-2026-data"
 ROOT = Path("/data/allowed-training/perception-test/kite3")
@@ -17,7 +17,7 @@ volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("joblib>=1.4,<2", "numpy>=1.26,<3", "scikit-learn>=1.6,<2")
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 

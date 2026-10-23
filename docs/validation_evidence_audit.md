@@ -5,7 +5,7 @@ The private validation artifact was checked against the authoritative manifest s
 Command:
 
 ```bash
-python validate_validation_artifacts.py /tmp/validation_questions.json submissions/kite4_omni_validation.json submissions/kite4_omni_evidence.json
+python -m kilometer_audio.tools.validate_validation_artifacts /tmp/validation_questions.json submissions/kite4_omni_validation.json submissions/kite4_omni_evidence.json
 ```
 
 Result: 8 manifest questions, 8 submission questions, 8 evidence questions; exact ID coverage; `schema_errors=[]`; `invalid_intervals=[]`; `negative_card_durations=[]`.

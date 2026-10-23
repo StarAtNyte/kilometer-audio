@@ -5,7 +5,7 @@ from typing import Any
 
 import modal
 
-from kite_core import TRACK_ROOT, atomic_write_json, build_submission, validate_predictions
+from kilometer_audio.kite_core import TRACK_ROOT, atomic_write_json, build_submission, validate_predictions
 
 VOLUME_NAME = "perception-test-2026-data"
 FALLBACK_VIDEOS = {"yzDPjzyl-ek", "idx41AgnL6U", "oj_G_Dc9RBM", "V_Yl5Fwujqs", "n2o2EzjaBfE", "V-43u9V8k0s"}
@@ -13,7 +13,7 @@ MOSS_THRESHOLD = 0.80
 
 app = modal.App("kilometer-audio-moss-adjudication")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
-image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kite_core")
+image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kilometer_audio")
 
 
 @app.function(image=image, volumes={"/data": volume}, timeout=30 * 60)

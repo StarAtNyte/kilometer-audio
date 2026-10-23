@@ -12,7 +12,7 @@ from typing import Any
 
 import modal
 
-from kite_core import SHARED_VIDEO_ROOT, TRACK_ROOT, atomic_write_json, build_submission
+from kilometer_audio.kite_core import SHARED_VIDEO_ROOT, TRACK_ROOT, atomic_write_json, build_submission
 
 VOLUME_NAME = "perception-test-2026-data"
 UNUSABLE_VIDEOS: set[str] = set()
@@ -22,7 +22,7 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
     .pip_install("requests")
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 secret = modal.Secret.from_name("gemini-api-key")
 secret_pool = modal.Secret.from_name("gemini-api-keys")

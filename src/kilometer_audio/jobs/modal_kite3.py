@@ -9,7 +9,7 @@ from typing import Any
 
 import modal
 
-from kite_core import atomic_write_json, jsonl_write
+from kilometer_audio.kite_core import atomic_write_json, jsonl_write
 
 VOLUME_NAME = "perception-test-2026-data"
 TRAIN_ROOT = Path("/data/allowed-training/perception-test")
@@ -22,7 +22,7 @@ volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
 cpu_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("soundfile>=0.13,<1")
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 clap_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -33,7 +33,7 @@ clap_image = (
         "transformers>=4.54,<5",
     )
     .env({"HF_HOME": "/data/2706-kilometer-audio/models/huggingface"})
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 

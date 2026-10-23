@@ -24,7 +24,7 @@ IMAGE = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
     .pip_install("google-genai")
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 APP = modal.App("kilometer-audio-option-tournament")
 
@@ -125,7 +125,7 @@ def run(shard: int = 0, shards: int = 1, cooldown_sec: float = 30.0,
         only_disagreements: bool = True) -> dict[str, Any]:
     from google import genai
     from google.genai import types
-    from kite_core import TRACK_ROOT, build_submission, validate_predictions
+    from kilometer_audio.kite_core import TRACK_ROOT, build_submission, validate_predictions
 
     VOLUME.reload()
     root = TRACK_ROOT
@@ -234,7 +234,7 @@ def run(shard: int = 0, shards: int = 1, cooldown_sec: float = 30.0,
 @APP.function(image=IMAGE, volumes={"/data": VOLUME}, timeout=30 * 60)
 def aggregate(output_tag: str = "kite11-tournament") -> dict[str, Any]:
     """Build a complete candidate from any finished checkpoints."""
-    from kite_core import TRACK_ROOT, build_submission, validate_predictions
+    from kilometer_audio.kite_core import TRACK_ROOT, build_submission, validate_predictions
 
     VOLUME.reload()
     root = TRACK_ROOT

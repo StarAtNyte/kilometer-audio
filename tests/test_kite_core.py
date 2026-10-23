@@ -1,4 +1,4 @@
-from kite_core import (
+from kilometer_audio.kite_core import (
     aggregate_permutation_votes,
     build_submission,
     canonical_answer_id,

@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from kite_core import QuestionPlan, compile_question
+from kilometer_audio.kite_core import QuestionPlan, compile_question
 
 
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")

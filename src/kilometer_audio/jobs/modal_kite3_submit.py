@@ -9,7 +9,7 @@ from typing import Any
 
 import modal
 
-from kite_core import (
+from kilometer_audio.kite_core import (
     SHARED_VIDEO_ROOT,
     TRACK_ROOT,
     atomic_write_json,
@@ -37,7 +37,7 @@ gpu_image = (
         "transformers>=4.57,<5",
     )
     .env({"HF_HOME": str(TRACK_ROOT / "models" / "huggingface")})
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 

@@ -6,7 +6,7 @@ Tested `ai-sage/GigaChat3.1-Audio-10B-A1.8B` (open, MIT-licensed, audio-native
 MoE LLM; verified to exist on HuggingFace before use) as a direct MCQ verifier
 answering from real reconstructed audio on the frozen five-timeline,
 eight-query holdout transfer sample. New script
-`modal_gigachat_audio_probe.py`. Only authorized dev/holdout folds were used;
+`src/kilometer_audio/jobs/modal_gigachat_audio_probe.py`. Only authorized dev/holdout folds were used;
 no KilometerAudio validation/test answers were read or used for tuning.
 
 Two infrastructure issues surfaced and were fixed along the way:
@@ -22,7 +22,7 @@ Two infrastructure issues surfaced and were fixed along the way:
    float before loading from the local directory (`fix_routed_scaling_factor`)
    — an upstream config/library mismatch, not a project bug.
 3. **More significant finding:** the composite `materialized/{fold}/{timeline}.mp4`
-   used by every holdout-ablation card in this campaign (`modal_timelens2.py`,
+   used by every holdout-ablation card in this campaign (`src/kilometer_audio/jobs/modal_timelens2.py`,
    `materialize_timeline`) is built with `concat=...:a=0` — video-only, zero
    audio streams. Every prior "audio-aware" Gemini/Qwen holdout number in this
    campaign's docs (e.g. the 28/40 Gemini 3.6-flash result, the 21/40 frozen

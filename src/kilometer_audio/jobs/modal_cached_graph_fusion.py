@@ -7,14 +7,14 @@ from typing import Any
 
 import modal
 
-from evidence_graph_fusion import fuse_cached_answer
-from kite_core import TRACK_ROOT, build_submission, validate_predictions
+from kilometer_audio.evidence_graph_fusion import fuse_cached_answer
+from kilometer_audio.kite_core import TRACK_ROOT, build_submission, validate_predictions
 
 
 VOLUME = modal.Volume.from_name("perception-test-2026-data", create_if_missing=False)
 app = modal.App("kilometer-audio-cached-graph-fusion")
 image = modal.Image.debian_slim(python_version="3.11").add_local_python_source(
-    "kite_core", "evidence_graph_fusion"
+    "kilometer_audio"
 )
 
 

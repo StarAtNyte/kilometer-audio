@@ -4,11 +4,11 @@
 
 Tested whether widening the RRF fusion union from top-3 to top-5 sources
 raises Gemini 3.6-flash accuracy on the frozen five-timeline, eight-query
-holdout transfer sample. `build_evidence_cards` in `modal_timelens2.py` gained
+holdout transfer sample. `build_evidence_cards` in `src/kilometer_audio/jobs/modal_timelens2.py` gained
 a `source_k` parameter (default 3, unchanged behavior); the RRF branch now
 takes `sorted(rrf, ...)[:source_k]` instead of a hardcoded `[:3]`. Top-5 cards
 are written under a new tag (`fused5-8`) so the existing frozen `fused-8` cards
-used by run `579586` are untouched. `modal_gemini_probe.py` gained a
+used by run `579586` are untouched. `src/kilometer_audio/jobs/modal_gemini_probe.py` gained a
 `card_policy="fused-wide"` option reading the new tag. Only authorized
 dev/holdout folds were used; no KilometerAudio validation/test answers were
 read or used for tuning.

@@ -10,7 +10,7 @@ from typing import Any
 
 import modal
 
-from kite_core import (
+from kilometer_audio.kite_core import (
     TRACK_ROOT,
     atomic_write_json,
     build_submission,
@@ -69,7 +69,7 @@ moss_image = (
             "PYTHONPATH": "/opt/moss-audio",
         }
     )
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 
@@ -334,7 +334,7 @@ def train_sound_lora(epochs: float = 1.0) -> dict[str, Any]:
     train_path = folds / "moss_sound_train.jsonl"
     dev_path = folds / "moss_sound_dev.jsonl"
     if not train_path.exists() or not dev_path.exists():
-        raise FileNotFoundError("Run modal_train_data.py --action folds first")
+        raise FileNotFoundError("Run modal run -m kilometer_audio.jobs.modal_train_data --action folds first")
     output_dir = TRACK_ROOT / "models" / "moss" / "kite2-sound-lora"
     command = [
         "python",
@@ -407,7 +407,7 @@ def train_mcq_lora(epochs: float = 1.0) -> dict[str, Any]:
     train_path = folds / "moss_mcq_train.jsonl"
     dev_path = folds / "moss_mcq_dev.jsonl"
     if not train_path.exists() or not dev_path.exists():
-        raise FileNotFoundError("Rebuild folds with modal_train_data.py --action folds")
+        raise FileNotFoundError("Rebuild folds with modal run -m kilometer_audio.jobs.modal_train_data --action folds")
     output_dir = TRACK_ROOT / "models" / "moss" / "kite2-mcq-lora"
     resume_checkpoint = output_dir / "checkpoint-250"
     command = [

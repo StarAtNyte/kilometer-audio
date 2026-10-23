@@ -31,7 +31,7 @@ the retrieved text. Wind_Rain_Tower's method is not disclosed.
 ## Next experiment priority
 
 A first caption-index ablation was implemented in
-`modal_gemini_caption_probe.py`: Gemini captions the retrieved evidence clip,
+`src/kilometer_audio/jobs/modal_gemini_caption_probe.py`: Gemini captions the retrieved evidence clip,
 then a second Gemini call answers from the caption. On holdout-000 it scored
 5/8 (62.5%), below the direct evidence-card Gemini baseline of 7/8 (87.5%).
 The full-window audio-aware Gemini 3.5 index was then successfully cached for
@@ -41,7 +41,7 @@ A caption-assisted direct-video variant (original evidence video plus retrieved
 captions) also scored 6/8, below direct Gemini 3.6 at 7/8. It is not yet a
 promotion candidate.
 
-Vertex AI access is configured in `modal_vertex_gemini_probe.py` using the
+Vertex AI access is configured in `src/kilometer_audio/jobs/modal_vertex_gemini_probe.py` using the
 profile-local `gcp-vertex-service-account` secret and inline video bytes. A
 bounded Gemini 3.5 Vertex call succeeded at 1/1 on holdout-000. Larger runs
 encountered Vertex 429/504 service quota/deadline responses while another API
@@ -53,7 +53,7 @@ result.
 
 ## Structured caption-ledger pilot (2026-08-25)
 
-`modal_caption_ledger.py` now builds overlapping 30-second/15-second windows
+`src/kilometer_audio/jobs/modal_caption_ledger.py` now builds overlapping 30-second/15-second windows
 with structured `visual`, `audio`, `speech`, `ocr`, `summary`, and event fields.
 The caption stage uses Vertex Gemini 3.6 with low thinking and writes resumable
 shards; the ledger stage retrieves independently from the question, each option,
@@ -106,7 +106,7 @@ policies are rejected. This confirms that source-span recall must be paired
 with evidence selection and answer stability, not simply a larger clip.
 
 The correct global experiment is now implemented in
-`modal_caption_index.py`. It creates overlapping timestamped windows with
+`src/kilometer_audio/jobs/modal_caption_index.py`. It creates overlapping timestamped windows with
 `window_id`, `start_sec`, `end_sec`, and `caption` fields. Local
 `Qwen3-VL-8B-Instruct` captioned all 54 holdout-000 windows (30-second windows,
 20-second stride) on the migrated A10G Volume. BM25 reached only 19/211 (9.0%)
@@ -120,7 +120,7 @@ quota-blocked. Keep the current Gemini evidence-card candidate frozen; do not
 use hidden test labels or infer competitor answers.
 
 The SigLIP retriever also now has an explicit `discriminative` variant in
-`modal_kite3_visual.py`: each answer option is queried with terms unique to
+`src/kilometer_audio/jobs/modal_kite3_visual.py`: each answer option is queried with terms unique to
 that option among its siblings. The lattice was rebuilt on `whitestjohn0`
 from all 213 holdout source segments, allowing measurement despite the
 blocked `gpudashboard0` workspace. Full-option option-max retrieval scored
@@ -361,7 +361,7 @@ differed from the all-zero fallback. The recovered artifact is
 keeps the original submission untouched, and has not been submitted.
 
 Root-cause audit found why those media were incorrectly classified as
-unusable. `modal_kite3_submit.py` selected 24 frames from each full recording,
+unusable. `src/kilometer_audio/jobs/modal_kite3_submit.py` selected 24 frames from each full recording,
 assigned five seconds to every frame, and then used the resulting ~120-second
 proxy while retaining original SigLIP timestamps. Late timestamps were thus
 clamped to the short proxy duration, producing invalid intervals and fallbacks.
@@ -432,7 +432,7 @@ quota window, but the `baptinjean` workspace rejected the remote task at launch
 for exceeding its spend limit. No test media or prior submission artifacts were
 modified by that attempt.
 
-The fallback merge path was hardened with `make_repaired_submission.py`.
+The fallback merge path was hardened with `src/kilometer_audio/tools/make_repaired_submission.py`.
 It requires complete question coverage, validates answer IDs and option text,
 permits changes only on evidence-marked fallback questions, and emits an audit
 report. Running it on the sparse recovery produced a schema-valid 500-question

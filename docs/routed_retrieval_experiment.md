@@ -6,8 +6,8 @@ This authorized-fold experiment added a deterministic text-only router to the
 existing CLAP/SigLIP evidence path. It routes audio-only questions to CLAP
 sources, visual-only questions to SigLIP sources, and temporal/cross-modal or
 ambiguous questions to the existing RRF union. The router uses no answer labels
-or KilometerAudio data. Implementation is in `kite_core.py` and
-`modal_timelens2.py`.
+or KilometerAudio data. Implementation is in `src/kilometer_audio/kite_core.py` and
+`src/kilometer_audio/jobs/modal_timelens2.py`.
 
 ## Holdout result
 

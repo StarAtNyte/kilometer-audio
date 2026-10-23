@@ -6,8 +6,8 @@ KITE-10 is a deterministic, no-inference postprocessor over the cached KITE-8
 and KITE-9 answer artifacts. It does not call Gemini, download media, or use
 test labels.
 
-The implementation is split into `evidence_graph_fusion.py` and
-`modal_cached_graph_fusion.py`. Each question is compiled into semantic and
+The implementation is split into `src/kilometer_audio/evidence_graph_fusion.py` and
+`src/kilometer_audio/jobs/modal_cached_graph_fusion.py`. Each question is compiled into semantic and
 temporal claims. Each answer option receives support from cached option-tagged
 retrieval sources, lexical evidence, timestamp fit, and contradiction
 penalties. The selector uses KITE-9 as the primary answer and changes it only

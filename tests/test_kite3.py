@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from modal_kite3 import group_video_ids, stable_order
-from modal_kite3_router import query_document, stable_fold
-from modal_kite3_submit import full_timeline_proxy_args, parse_spans
-from modal_kite3_visual import route_to_audio
-from modal_kite4_omni import parse_letter
-from modal_timelens2 import merge_intervals, overlaps, parse_answer_id, parse_intervals
+from kilometer_audio.jobs.modal_kite3 import group_video_ids, stable_order
+from kilometer_audio.jobs.modal_kite3_router import query_document, stable_fold
+from kilometer_audio.jobs.modal_kite3_submit import full_timeline_proxy_args, parse_spans
+from kilometer_audio.jobs.modal_kite3_visual import route_to_audio
+from kilometer_audio.jobs.modal_kite4_omni import parse_letter
+from kilometer_audio.jobs.modal_timelens2 import merge_intervals, overlaps, parse_answer_id, parse_intervals
 
 
 def test_stable_order_is_deterministic_and_seeded() -> None:

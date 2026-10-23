@@ -9,13 +9,13 @@ from typing import Any
 
 import modal
 
-from kite_core import compile_question, route_question, jsonl_write
+from kilometer_audio.kite_core import compile_question, route_question, jsonl_write
 
 ROOT = Path("/data/allowed-training/perception-test/kite3")
 VOLUME_NAME = "perception-test-2026-data"
 app = modal.App("kilometer-audio-query-ledger-experiment")
 volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=False)
-image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kite_core")
+image = modal.Image.debian_slim(python_version="3.11").add_local_python_source("kilometer_audio")
 gpu_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
@@ -28,7 +28,7 @@ gpu_image = (
         "transformers>=4.57,<5",
     )
     .env({"HF_HOME": "/data/allowed-training/perception-test/kite3/models/huggingface"})
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 

@@ -9,7 +9,7 @@ from typing import Any
 
 import modal
 
-from kite_core import SHARED_VIDEO_ROOT, TRACK_ROOT, atomic_write_json, build_submission
+from kilometer_audio.kite_core import SHARED_VIDEO_ROOT, TRACK_ROOT, atomic_write_json, build_submission
 
 VOLUME_NAME = "perception-test-2026-data"
 MODEL_NAME = "Qwen/Qwen3-Omni-30B-A3B-Instruct"
@@ -34,7 +34,7 @@ image = (
             "FORCE_QWENVL_VIDEO_READER": "decord",
         }
     )
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 

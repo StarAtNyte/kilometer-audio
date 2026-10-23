@@ -2,7 +2,7 @@
 
 ## Scope
 
-`modal_qwen_thinking_probe.py` evaluates `Qwen/Qwen3-Omni-30B-A3B-Thinking`
+`src/kilometer_audio/jobs/modal_qwen_thinking_probe.py` evaluates `Qwen/Qwen3-Omni-30B-A3B-Thinking`
 on authorized Perception Test dev/holdout material only. It renders a dense
 2-FPS local audio/video evidence interval, asks the model to reason about exact
 timestamps and modalities, and requires a final `FINAL: <digit>` answer. The

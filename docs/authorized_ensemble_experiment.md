@@ -11,8 +11,8 @@ execution or EvalAI submission was made.
 Candidate configuration and boundaries:
 
 - **MOSS MCQ candidates:** frozen `mcq-checkpoint-500` and `mcq-checkpoint-741`, evaluated only from authorized train-derived dev/holdout prediction artifacts; parse coverage was 100%.
-- **KITE-4-style candidate:** the existing Qwen3-Omni audio/video implementation in `modal_kite4_omni.py`; its frozen KilometerAudio validation artifact was not rerun or used for tuning in this experiment, so no authorized-fold KITE-4 score is claimed.
-- **Routing/ensemble candidate:** `authorized_ensemble_experiment.py`, which averages canonical-option probabilities from the two MOSS candidates and uses deterministic tie handling.
+- **KITE-4-style candidate:** the existing Qwen3-Omni audio/video implementation in `src/kilometer_audio/jobs/modal_kite4_omni.py`; its frozen KilometerAudio validation artifact was not rerun or used for tuning in this experiment, so no authorized-fold KITE-4 score is claimed.
+- **Routing/ensemble candidate:** `src/kilometer_audio/tools/authorized_ensemble_experiment.py`, which averages canonical-option probabilities from the two MOSS candidates and uses deterministic tie handling.
 
 | Candidate | Fold | Questions | Correct | Accuracy |
 |---|---:|---:|---:|---:|
@@ -29,7 +29,7 @@ checkpoint-500 holdout prediction file was not available.
 ## Reproduction
 
 ```bash
-python authorized_ensemble_experiment.py \
+python -m kilometer_audio.tools.authorized_ensemble_experiment \
   /private/dev/moss_mcq-checkpoint-500_constrained_predictions.json \
   /private/dev/moss_mcq-checkpoint-741_constrained_predictions.json \
   --weight 0.5

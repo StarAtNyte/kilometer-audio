@@ -12,7 +12,7 @@ from typing import Any
 
 import modal
 
-from kite_core import (
+from kilometer_audio.kite_core import (
     SHARED_VIDEO_ROOT,
     TRACK_ROOT,
     atomic_write_json,
@@ -46,7 +46,7 @@ foundation_image = (
     .pip_install("yt-dlp[default]>=2026.7.4,<2026.8")
 )
 
-base_image = foundation_image.add_local_python_source("kite_core")
+base_image = foundation_image.add_local_python_source("kilometer_audio")
 
 audio_image = (
     foundation_image.pip_install(
@@ -67,7 +67,7 @@ audio_image = (
             ),
         }
     )
-    .add_local_python_source("kite_core")
+    .add_local_python_source("kilometer_audio")
 )
 
 

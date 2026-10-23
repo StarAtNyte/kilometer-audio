@@ -1,4 +1,4 @@
-from evidence_graph_fusion import compile_claim_graph, fuse_cached_answer, score_options
+from kilometer_audio.evidence_graph_fusion import compile_claim_graph, fuse_cached_answer, score_options
 
 
 def question(text="When was the saxophone first heard?"):
